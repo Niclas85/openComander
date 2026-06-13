@@ -33,7 +33,9 @@ OpenCommander arbeitet lokal auf deinem Geraet. Die App uebertraegt keine Dateie
 
 Open Source:
 
-Der Quellcode soll offen verfuegbar sein, damit Nutzer nachvollziehen koennen, was die App tut, Fehler melden und Verbesserungen beitragen koennen.
+Der Quellcode ist offen verfuegbar, damit Nutzer nachvollziehen koennen, was die App tut, Fehler melden und Verbesserungen beitragen koennen:
+
+https://github.com/Niclas85/openComander
 
 Kontakt:
 

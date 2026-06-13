@@ -710,6 +710,8 @@ public class MainActivity extends Activity {
             int done = 0;
             String error = null;
             for (FileEntry source : sources) {
+                File replacedBackup = null;
+                File destination = null;
                 try {
                     File sourceFile = source.file;
                     File targetFolder = targetDirectory.file;
@@ -721,8 +723,6 @@ public class MainActivity extends Activity {
                     }
 
                     File preferredDestination = new File(targetFolder, sourceFile.getName());
-                    File replacedBackup = null;
-                    File destination;
                     if (preferredDestination.exists() && !sameFile(sourceFile, preferredDestination)) {
                         if (conflictMode == ConflictMode.REPLACE) {
                             replacedBackup = backupExistingDestination(preferredDestination, operation.backupRoot);
@@ -748,6 +748,16 @@ public class MainActivity extends Activity {
                     counter.itemDone();
                     done++;
                 } catch (IOException exception) {
+                    try {
+                        if (destination != null && destination.exists()) {
+                            deleteRecursive(destination);
+                        }
+                        if (replacedBackup != null && replacedBackup.exists() && destination != null) {
+                            restoreBackup(replacedBackup, destination);
+                        }
+                    } catch (IOException ignored) {
+                        // Keep the original error visible; best-effort cleanup may fail on locked files.
+                    }
                     error = exception.getMessage();
                     break;
                 }
@@ -761,13 +771,13 @@ public class MainActivity extends Activity {
                 rightPane.reloadTreeKeepingExpansion();
                 leftPane.refreshFiles();
                 rightPane.refreshFiles();
-                if (finalError == null) {
-                    if (!operation.records.isEmpty()) {
-                        undoHistory.add(0, operation);
-                        while (undoHistory.size() > 12) {
-                            undoHistory.remove(undoHistory.size() - 1);
-                        }
+                if (!operation.records.isEmpty()) {
+                    undoHistory.add(0, operation);
+                    while (undoHistory.size() > 12) {
+                        undoHistory.remove(undoHistory.size() - 1);
                     }
+                }
+                if (finalError == null) {
                     finishProgress(move ? getString(R.string.moved_items, finalDone) : getString(R.string.copied_items, finalDone));
                 } else {
                     finishProgress(getString(R.string.error_prefix, finalError));

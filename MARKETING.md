@@ -93,7 +93,7 @@ Badges:
 
 P0:
 
-- GitHub-Repository mit README, Screenshots, Lizenz und Releases.
+- GitHub-Repository mit README, Screenshots, Lizenz und Releases: https://github.com/Niclas85/openComander
 - F-Droid-Einreichung pruefen, sobald Release-Signing und Metadaten stabil sind.
 - Reddit/Foren nur mit ehrlichem Build-Log posten, nicht werblich spammen.
 
@@ -113,7 +113,7 @@ P2:
 
 1. Store-Listing aus `playstore/listing-de.md` und `playstore/listing-en.md` finalisieren.
 2. Lizenz und Anbieterangaben pruefen.
-3. README mit Screenshots und Open-Source-Hinweis auf GitHub veroeffentlichen.
+3. README mit Screenshots und Open-Source-Hinweis auf GitHub veroeffentlichen: https://github.com/Niclas85/openComander
 4. Feature Graphic und Screenshots mit den empfohlenen Claims abgleichen.
 5. Privacy/Terms auf einer oeffentlichen URL hosten.
 6. Testrelease intern verteilen.

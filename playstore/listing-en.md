@@ -34,7 +34,9 @@ OpenCommander works locally on your device. It does not upload files to provider
 
 Open source:
 
-The source code is intended to be publicly available so users can inspect what the app does, report issues and contribute improvements.
+The source code is publicly available so users can inspect what the app does, report issues and contribute improvements:
+
+https://github.com/Niclas85/openComander
 
 Contact:
 

@@ -37,6 +37,10 @@ OpenCommander ist ein lokaler Android-Dateimanager im Stil eines zweigeteilten C
 - Lokale Dateiverwaltung statt Cloud-Zwang
 - Zwei-Seiten-Workflow fuer schnelleres Kopieren und Verschieben
 
+## Repository
+
+Quellcode: https://github.com/Niclas85/openComander
+
 ## Rechtliches
 
 Vorlagen und Prueflisten liegen unter `legal/`:
