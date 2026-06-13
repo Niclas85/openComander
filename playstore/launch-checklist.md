@@ -22,8 +22,8 @@
 ## Google Play Readiness
 
 - Data Safety answers match the app: no analytics, no ads, no account, no provider upload.
-- Data Safety answers are copied from `playstore/data-safety-de.md`.
-- All Files Access declaration is copied from `playstore/all-files-access-de.md`.
+- Data Safety answers are prepared in `playstore/data-safety-de.md` and `playstore/play-console-answers-de.md`.
+- All Files Access declaration is prepared in `playstore/all-files-access-de.md` and `playstore/play-console-answers-de.md`.
 - Store listing avoids third-party trademarks in promotional claims.
 - Screenshots show real product UI.
 - Feature graphic and icon match the app name.

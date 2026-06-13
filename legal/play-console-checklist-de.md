@@ -3,13 +3,13 @@
 ## App-Berechtigungen
 
 - All-Files-Access pruefen und begruenden.
-- In der Play Console die Erklaerung fuer `MANAGE_EXTERNAL_STORAGE` ausfuellen.
+- In der Play Console die Erklaerung fuer `MANAGE_EXTERNAL_STORAGE` aus `playstore/play-console-answers-de.md` ausfuellen.
 - Begruendung: Kernfunktion eines lokalen Dateimanagers.
 
 ## Datenschutz
 
 - Oeffentliche Datenschutzerklaerung als URL bereitstellen.
-- Data-Safety-Formular ausfuellen.
+- Data-Safety-Formular mit den Antworten aus `playstore/play-console-answers-de.md` ausfuellen: keine Sammlung oder Weitergabe von Nutzerdaten, solange keine Analytics, Werbung, Crash-Reporting, Cloud oder Konten eingebaut sind.
 - Empfehlungen aus `legal/legal-security-review-2026-06-13.md` pruefen.
 - Aktueller Stand der App:
   - keine Werbung
