@@ -1,0 +1,8 @@
+OpenCommander 1.0
+
+- Zwei-Seiten-Dateimanager fuer Android
+- Kopieren und Verschieben per Drag & Drop
+- ZIP-Dateien wie Ordner durchsuchen
+- ZIP-Archive aus markierten Dateien erstellen
+- Rueckgaengig mit Historie
+- Keine Werbung, kein Tracking, kein Konto

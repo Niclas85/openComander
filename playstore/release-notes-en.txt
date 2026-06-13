@@ -1,0 +1,8 @@
+OpenCommander 1.0
+
+- Dual-pane file manager for Android
+- Copy and move with drag & drop
+- Browse ZIP files like folders
+- Create ZIP archives from selected files
+- Undo with history
+- No ads, no tracking, no account
