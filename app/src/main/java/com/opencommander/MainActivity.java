@@ -33,6 +33,7 @@ import android.view.WindowInsets;
 import android.webkit.MimeTypeMap;
 import android.widget.BaseAdapter;
 import android.widget.Button;
+import android.widget.HorizontalScrollView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -141,7 +142,13 @@ public class MainActivity extends Activity {
                 int bottom = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
                         ? insets.getInsets(WindowInsets.Type.systemBars()).bottom
                         : insets.getSystemWindowInsetBottom();
-                view.setPadding(sidePadding, baseTopPadding + top, sidePadding, baseBottomPadding + bottom);
+                int left = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                        ? insets.getInsets(WindowInsets.Type.systemBars()).left
+                        : insets.getSystemWindowInsetLeft();
+                int right = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                        ? insets.getInsets(WindowInsets.Type.systemBars()).right
+                        : insets.getSystemWindowInsetRight();
+                view.setPadding(sidePadding + left, baseTopPadding + top, sidePadding + right, baseBottomPadding + bottom);
                 return insets;
             });
         }
@@ -227,10 +234,10 @@ public class MainActivity extends Activity {
         topBar.setOrientation(landscape ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setPadding(
-                landscape ? dp(8) : dp(12),
-                landscape ? dp(4) : dp(10),
-                landscape ? dp(8) : dp(12),
-                landscape ? dp(4) : dp(10));
+                landscape ? dp(6) : dp(12),
+                landscape ? dp(3) : dp(10),
+                landscape ? dp(6) : dp(12),
+                landscape ? dp(3) : dp(10));
         topBar.setBackground(rounded(theme.headerBackground, theme.panelBorder, 1, 12));
 
         LinearLayout titleRow = new LinearLayout(this);
@@ -240,7 +247,7 @@ public class MainActivity extends Activity {
         TextView title = new TextView(this);
         title.setText(getString(R.string.app_name));
         title.setTextColor(color(theme.headerText));
-        title.setTextSize(landscape ? 16 : 20);
+        title.setTextSize(landscape ? 14 : 20);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setSingleLine(true);
         titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -262,7 +269,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
                 landscape ? 0 : ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                landscape ? 0.22f : 0f);
+                landscape ? 0.16f : 0f);
         if (landscape) {
             titleParams.setMargins(0, 0, dp(6), 0);
         }
@@ -372,10 +379,20 @@ public class MainActivity extends Activity {
             });
             controlsRow.addView(darkModeSwitch);
         }
-        topBar.addView(controlsRow, new LinearLayout.LayoutParams(
+        View controlsView = controlsRow;
+        if (landscape) {
+            HorizontalScrollView scroll = new HorizontalScrollView(this);
+            scroll.setHorizontalScrollBarEnabled(false);
+            scroll.setFillViewport(false);
+            scroll.addView(controlsRow, new HorizontalScrollView.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            controlsView = scroll;
+        }
+        topBar.addView(controlsView, new LinearLayout.LayoutParams(
                 landscape ? 0 : ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                landscape ? 0.78f : 0f));
+                landscape ? 0.84f : 0f));
 
         return topBar;
     }
@@ -462,12 +479,12 @@ public class MainActivity extends Activity {
     }
 
     private void makeLandscapeButton(Button button) {
-        button.setTextSize(11);
+        button.setTextSize(10);
         button.setMinWidth(0);
         button.setMinHeight(0);
         button.setMinimumWidth(0);
         button.setMinimumHeight(0);
-        button.setPadding(dp(8), 0, dp(8), 0);
+        button.setPadding(dp(6), 0, dp(6), 0);
     }
 
     private void makeLowPriorityButton(Button button) {
@@ -482,8 +499,8 @@ public class MainActivity extends Activity {
     private void addControlButton(LinearLayout row, Button button, boolean landscape) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                landscape ? dp(30) : dp(36));
-        params.setMargins(0, 0, dp(4), 0);
+                landscape ? dp(28) : dp(36));
+        params.setMargins(0, 0, landscape ? dp(3) : dp(4), 0);
         row.addView(button, params);
     }
 
@@ -638,12 +655,12 @@ public class MainActivity extends Activity {
     }
 
     private void confirmDeleteSelection() {
-        CommanderPane pane = selectedPane();
-        if (pane == null) {
+        List<CommanderPane> panes = selectedPanes();
+        if (panes.isEmpty()) {
             updateGlobalStatus(getString(R.string.no_file_selected));
             return;
         }
-        List<FileEntry> sources = pane.selectedEntries();
+        List<FileEntry> sources = selectedEntriesFromPanes(panes);
         if (sources.isEmpty()) {
             updateGlobalStatus(getString(R.string.no_readable_selection));
             return;
@@ -660,32 +677,53 @@ public class MainActivity extends Activity {
             }
         }
 
-        CommanderPane sourcePane = pane;
         new AlertDialog.Builder(this)
                 .setTitle(getString(R.string.delete_title))
                 .setMessage(getString(R.string.delete_message, sources.size()))
                 .setPositiveButton(getString(R.string.delete_permanent), (dialog, which) ->
-                        executeDeleteOperation(sourcePane, sources, false))
+                        executeDeleteOperation(panes, sources, false))
                 .setNegativeButton(getString(R.string.trash), (dialog, which) ->
-                        executeDeleteOperation(sourcePane, sources, true))
+                        executeDeleteOperation(panes, sources, true))
                 .setNeutralButton(getString(R.string.cancel), null)
                 .show();
     }
 
-    private CommanderPane selectedPane() {
+    private List<CommanderPane> selectedPanes() {
+        List<CommanderPane> panes = new ArrayList<>();
         if (activePane != null && !activePane.selectedKeys.isEmpty()) {
-            return activePane;
+            panes.add(activePane);
         }
-        if (!leftPane.selectedKeys.isEmpty()) {
-            return leftPane;
+        if (!leftPane.selectedKeys.isEmpty() && leftPane != activePane) {
+            panes.add(leftPane);
         }
-        if (!rightPane.selectedKeys.isEmpty()) {
-            return rightPane;
+        if (!rightPane.selectedKeys.isEmpty() && rightPane != activePane) {
+            panes.add(rightPane);
         }
-        return null;
+        return panes;
     }
 
-    private void executeDeleteOperation(CommanderPane sourcePane, List<FileEntry> sources, boolean trash) {
+    private List<FileEntry> selectedEntriesFromPanes(List<CommanderPane> panes) {
+        List<FileEntry> entries = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (CommanderPane pane : panes) {
+            for (FileEntry entry : pane.selectedEntries()) {
+                String key = entry.key();
+                if (entry.isPhysical()) {
+                    try {
+                        key = entry.file.getCanonicalPath();
+                    } catch (IOException ignored) {
+                        key = entry.file.getAbsolutePath();
+                    }
+                }
+                if (seen.add(key)) {
+                    entries.add(entry);
+                }
+            }
+        }
+        return entries;
+    }
+
+    private void executeDeleteOperation(List<CommanderPane> sourcePanes, List<FileEntry> sources, boolean trash) {
         LastOperation operation = new LastOperation(false, prepareBackupRoot(), false, !trash, trash);
         showProgress(getString(R.string.deleting_items, sources.size()), 0);
 
@@ -715,7 +753,9 @@ public class MainActivity extends Activity {
             int finalDone = done;
             String finalError = error;
             runOnUiThread(() -> {
-                sourcePane.clearSelection();
+                for (CommanderPane pane : sourcePanes) {
+                    pane.clearSelection();
+                }
                 leftPane.reloadTreeKeepingExpansion();
                 rightPane.reloadTreeKeepingExpansion();
                 leftPane.refreshFiles();
