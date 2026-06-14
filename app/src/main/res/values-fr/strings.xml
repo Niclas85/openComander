@@ -8,6 +8,7 @@
     <string name="undo">Annuler</string>
     <string name="copy">Copier</string>
     <string name="move">Déplacer</string>
+    <string name="delete_button">Supprimer</string>
     <string name="dark">Sombre</string>
     <string name="light">Clair</string>
     <string name="language">Langue</string>
@@ -26,10 +27,17 @@
     <string name="replace">Remplacer</string>
     <string name="keep">Conserver</string>
     <string name="cancel">Annuler</string>
+    <string name="delete_title">Supprimer la sélection ?</string>
+    <string name="delete_message">Que faire avec %1$d élément(s) sélectionné(s) ?</string>
+    <string name="delete_permanent">Supprimer</string>
+    <string name="trash">Corbeille</string>
     <string name="copying_items">Copie de %1$d élément(s)...</string>
     <string name="moving_items">Déplacement de %1$d élément(s)...</string>
+    <string name="deleting_items">Suppression de %1$d élément(s)...</string>
     <string name="copied_items">%1$d élément(s) copié(s)</string>
     <string name="moved_items">%1$d élément(s) déplacé(s)</string>
+    <string name="deleted_items">%1$d élément(s) supprimé(s)</string>
+    <string name="trashed_items">%1$d élément(s) déplacé(s) vers la corbeille</string>
     <string name="error_prefix">Erreur : %1$s</string>
     <string name="undo_empty">Rien à annuler</string>
     <string name="undo_empty_action">Cette action est vide</string>
@@ -59,6 +67,8 @@
     <string name="legal_message">OpenCommander\n\nLes conditions, la confidentialité et les mentions légales actuelles sont disponibles dans le dialogue juridique de l’application.</string>
     <string name="copy_label">Copier (%1$d)</string>
     <string name="move_label">Déplacer (%1$d)</string>
+    <string name="delete_label">Supprimer (%1$d)</string>
+    <string name="trash_label">Corbeille (%1$d)</string>
     <string name="copying_label">Copie</string>
     <string name="moving_label">Déplacement</string>
     <string name="cannot_copy_into_self">Le dossier ne peut pas être copié dans lui-même : %1$s</string>
@@ -66,6 +76,7 @@
     <string name="cannot_create_target_folder">Impossible de créer le dossier cible : %1$s</string>
     <string name="cannot_create_folder">Impossible de créer le dossier : %1$s</string>
     <string name="cannot_delete">Impossible de supprimer : %1$s</string>
+    <string name="cannot_move_to_trash">Impossible de déplacer vers la corbeille : %1$s</string>
     <string name="zip">ZIP</string>
     <string name="zip_no_selection">Sélectionnez d’abord des fichiers ou dossiers</string>
     <string name="zip_read_only">Le contenu ZIP est en lecture seule</string>

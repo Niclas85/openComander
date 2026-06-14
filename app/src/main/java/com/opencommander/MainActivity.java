@@ -72,6 +72,7 @@ public class MainActivity extends Activity {
     private Switch darkModeSwitch;
     private Button undoButton;
     private Button zipButton;
+    private Button deleteButton;
     private Button historyButton;
     private Button languageButton;
     private LinearLayout historyPanel;
@@ -279,6 +280,16 @@ public class MainActivity extends Activity {
         }
         undoButton.setOnClickListener(view -> undoNewestOperation());
         addControlButton(controlsRow, undoButton, landscape);
+
+        deleteButton = miniButton(getString(R.string.delete_button));
+        tintButton(deleteButton, "#FFE4E0", "#E88778", "#7A2017", "#51231F", "#C24131", "#FFECE8");
+        if (landscape) {
+            makeLandscapeButton(deleteButton);
+        } else {
+            makeSecondaryPortraitButton(deleteButton);
+        }
+        deleteButton.setOnClickListener(view -> confirmDeleteSelection());
+        addControlButton(controlsRow, deleteButton, landscape);
 
         if (landscape) {
             Button operationButton = miniButton(moveMode ? getString(R.string.move) : getString(R.string.copy));
@@ -626,6 +637,106 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private void confirmDeleteSelection() {
+        CommanderPane pane = selectedPane();
+        if (pane == null) {
+            updateGlobalStatus(getString(R.string.no_file_selected));
+            return;
+        }
+        List<FileEntry> sources = pane.selectedEntries();
+        if (sources.isEmpty()) {
+            updateGlobalStatus(getString(R.string.no_readable_selection));
+            return;
+        }
+        for (FileEntry source : sources) {
+            if (!source.isPhysical()) {
+                updateGlobalStatus(getString(R.string.zip_read_only));
+                return;
+            }
+            File parent = source.file.getParentFile();
+            if (parent == null || !parent.canWrite()) {
+                updateGlobalStatus(getString(R.string.target_not_writable));
+                return;
+            }
+        }
+
+        CommanderPane sourcePane = pane;
+        new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.delete_title))
+                .setMessage(getString(R.string.delete_message, sources.size()))
+                .setPositiveButton(getString(R.string.delete_permanent), (dialog, which) ->
+                        executeDeleteOperation(sourcePane, sources, false))
+                .setNegativeButton(getString(R.string.trash), (dialog, which) ->
+                        executeDeleteOperation(sourcePane, sources, true))
+                .setNeutralButton(getString(R.string.cancel), null)
+                .show();
+    }
+
+    private CommanderPane selectedPane() {
+        if (activePane != null && !activePane.selectedKeys.isEmpty()) {
+            return activePane;
+        }
+        if (!leftPane.selectedKeys.isEmpty()) {
+            return leftPane;
+        }
+        if (!rightPane.selectedKeys.isEmpty()) {
+            return rightPane;
+        }
+        return null;
+    }
+
+    private void executeDeleteOperation(CommanderPane sourcePane, List<FileEntry> sources, boolean trash) {
+        LastOperation operation = new LastOperation(false, prepareBackupRoot(), false, !trash, trash);
+        showProgress(getString(R.string.deleting_items, sources.size()), 0);
+
+        new Thread(() -> {
+            ProgressCounter counter = new ProgressCounter(sources);
+            counter.publish(true);
+            int done = 0;
+            String error = null;
+            for (FileEntry source : sources) {
+                try {
+                    File sourceFile = source.file;
+                    File destination;
+                    if (trash) {
+                        destination = moveToTrash(sourceFile, counter);
+                    } else {
+                        destination = backupForDelete(sourceFile, operation.backupRoot, counter);
+                    }
+                    operation.records.add(new OperationRecord(sourceFile, destination, null));
+                    counter.itemDone();
+                    done++;
+                } catch (IOException exception) {
+                    error = exception.getMessage();
+                    break;
+                }
+            }
+
+            int finalDone = done;
+            String finalError = error;
+            runOnUiThread(() -> {
+                sourcePane.clearSelection();
+                leftPane.reloadTreeKeepingExpansion();
+                rightPane.reloadTreeKeepingExpansion();
+                leftPane.refreshFiles();
+                rightPane.refreshFiles();
+                if (!operation.records.isEmpty()) {
+                    undoHistory.add(0, operation);
+                    while (undoHistory.size() > 12) {
+                        undoHistory.remove(undoHistory.size() - 1);
+                    }
+                }
+                if (finalError == null) {
+                    finishProgress(trash ? getString(R.string.trashed_items, finalDone) : getString(R.string.deleted_items, finalDone));
+                } else {
+                    finishProgress(getString(R.string.error_prefix, finalError));
+                }
+                updateUndoButton();
+                rebuildHistoryPanel();
+            });
+        }).start();
+    }
+
     private void addFileToZip(File source, String path, ZipOutputStream output,
                               Set<String> usedNames, ProgressCounter counter) throws IOException {
         String safePath = path.replace(File.separatorChar, '/');
@@ -803,6 +914,35 @@ public class MainActivity extends Activity {
         return backup;
     }
 
+    private File backupForDelete(File source, File backupRoot, ProgressCounter counter) throws IOException {
+        File backup = uniqueFile(backupRoot, source.getName());
+        copyRecursive(source, backup, counter);
+        deleteRecursive(source);
+        return backup;
+    }
+
+    private File moveToTrash(File source, ProgressCounter counter) throws IOException {
+        File parent = source.getParentFile();
+        if (parent == null) {
+            throw new IOException(getString(R.string.cannot_move_to_trash, source.getName()));
+        }
+        File trashFolder = new File(parent, ".OpenCommanderTrash");
+        if (isInside(source, trashFolder)) {
+            throw new IOException(getString(R.string.cannot_move_to_trash, source.getName()));
+        }
+        if (!trashFolder.exists() && !trashFolder.mkdirs()) {
+            throw new IOException(getString(R.string.cannot_create_folder, trashFolder.getName()));
+        }
+        File destination = uniqueFile(trashFolder, source.getName());
+        if (source.renameTo(destination)) {
+            counter.addBytes(Math.max(1L, totalBytes(destination)));
+            return destination;
+        }
+        copyRecursive(source, destination, counter);
+        deleteRecursive(source);
+        return destination;
+    }
+
     private void undoNewestOperation() {
         if (undoHistory.isEmpty()) {
             updateGlobalStatus(getString(R.string.undo_empty));
@@ -828,7 +968,7 @@ public class MainActivity extends Activity {
 
             for (OperationRecord record : records) {
                 try {
-                    if (operation.move) {
+                    if (operation.move || operation.delete || operation.trash) {
                         File parent = record.original.getParentFile();
                         if (parent != null && !parent.exists() && !parent.mkdirs()) {
                             throw new IOException(getString(R.string.missing_original_folder, parent.getAbsolutePath()));
@@ -2182,6 +2322,8 @@ public class MainActivity extends Activity {
     private static final class LastOperation {
         final boolean move;
         final boolean zip;
+        final boolean delete;
+        final boolean trash;
         final File backupRoot;
         final List<OperationRecord> records = new ArrayList<>();
         final long createdAt = System.currentTimeMillis();
@@ -2191,14 +2333,26 @@ public class MainActivity extends Activity {
         }
 
         LastOperation(boolean move, File backupRoot, boolean zip) {
+            this(move, backupRoot, zip, false, false);
+        }
+
+        LastOperation(boolean move, File backupRoot, boolean zip, boolean delete, boolean trash) {
             this.move = move;
             this.backupRoot = backupRoot;
             this.zip = zip;
+            this.delete = delete;
+            this.trash = trash;
         }
 
         String label(MainActivity activity) {
             if (zip) {
                 return activity.getString(R.string.zip_label, records.size());
+            }
+            if (delete) {
+                return activity.getString(R.string.delete_label, records.size());
+            }
+            if (trash) {
+                return activity.getString(R.string.trash_label, records.size());
             }
             return activity.getString(move ? R.string.move_label : R.string.copy_label, records.size());
         }

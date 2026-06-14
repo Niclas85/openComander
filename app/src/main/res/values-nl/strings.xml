@@ -8,6 +8,7 @@
     <string name="undo">Ongedaan</string>
     <string name="copy">Kopiëren</string>
     <string name="move">Verplaatsen</string>
+    <string name="delete_button">Verwijderen</string>
     <string name="dark">Donker</string>
     <string name="light">Licht</string>
     <string name="language">Taal</string>
@@ -26,10 +27,17 @@
     <string name="replace">Vervangen</string>
     <string name="keep">Behouden</string>
     <string name="cancel">Annuleren</string>
+    <string name="delete_title">Selectie verwijderen?</string>
+    <string name="delete_message">Wat moet er gebeuren met %1$d geselecteerde item(s)?</string>
+    <string name="delete_permanent">Verwijderen</string>
+    <string name="trash">Prullenbak</string>
     <string name="copying_items">%1$d item(s) kopiëren...</string>
     <string name="moving_items">%1$d item(s) verplaatsen...</string>
+    <string name="deleting_items">%1$d item(s) verwijderen...</string>
     <string name="copied_items">%1$d item(s) gekopieerd</string>
     <string name="moved_items">%1$d item(s) verplaatst</string>
+    <string name="deleted_items">%1$d item(s) verwijderd</string>
+    <string name="trashed_items">%1$d item(s) naar prullenbak verplaatst</string>
     <string name="error_prefix">Fout: %1$s</string>
     <string name="undo_empty">Niets om ongedaan te maken</string>
     <string name="undo_empty_action">Deze actie is leeg</string>
@@ -59,6 +67,8 @@
     <string name="legal_message">OpenCommander\n\nDe actuele voorwaarden, privacyinformatie en juridische gegevens staan in het juridische venster van de app.</string>
     <string name="copy_label">Kopiëren (%1$d)</string>
     <string name="move_label">Verplaatsen (%1$d)</string>
+    <string name="delete_label">Verwijderen (%1$d)</string>
+    <string name="trash_label">Prullenbak (%1$d)</string>
     <string name="copying_label">Kopiëren</string>
     <string name="moving_label">Verplaatsen</string>
     <string name="cannot_copy_into_self">Map kan niet naar zichzelf worden gekopieerd: %1$s</string>
@@ -66,6 +76,7 @@
     <string name="cannot_create_target_folder">Doelmap kon niet worden gemaakt: %1$s</string>
     <string name="cannot_create_folder">Map kon niet worden gemaakt: %1$s</string>
     <string name="cannot_delete">Kon niet verwijderen: %1$s</string>
+    <string name="cannot_move_to_trash">Kon niet naar prullenbak verplaatsen: %1$s</string>
     <string name="zip">ZIP</string>
     <string name="zip_no_selection">Selecteer eerst bestanden of mappen</string>
     <string name="zip_read_only">ZIP-inhoud is alleen-lezen</string>

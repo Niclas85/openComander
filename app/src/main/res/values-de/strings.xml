@@ -8,6 +8,7 @@
     <string name="undo">Rückgängig</string>
     <string name="copy">Kopieren</string>
     <string name="move">Verschieben</string>
+    <string name="delete_button">Löschen</string>
     <string name="dark">Dunkel</string>
     <string name="light">Hell</string>
     <string name="language">Sprache</string>
@@ -26,10 +27,17 @@
     <string name="replace">Ersetzen</string>
     <string name="keep">Behalten</string>
     <string name="cancel">Abbrechen</string>
+    <string name="delete_title">Auswahl löschen?</string>
+    <string name="delete_message">Was soll mit %1$d ausgewählten Element(en) passieren?</string>
+    <string name="delete_permanent">Löschen</string>
+    <string name="trash">Papierkorb</string>
     <string name="copying_items">Kopiere %1$d Element(e)...</string>
     <string name="moving_items">Verschiebe %1$d Element(e)...</string>
+    <string name="deleting_items">Lösche %1$d Element(e)...</string>
     <string name="copied_items">%1$d Element(e) kopiert</string>
     <string name="moved_items">%1$d Element(e) verschoben</string>
+    <string name="deleted_items">%1$d Element(e) gelöscht</string>
+    <string name="trashed_items">%1$d Element(e) in den Papierkorb verschoben</string>
     <string name="error_prefix">Fehler: %1$s</string>
     <string name="undo_empty">Nichts zum Rückgängigmachen</string>
     <string name="undo_empty_action">Diese Aktion ist leer</string>
@@ -60,6 +68,8 @@
     <string name="legal_message_full_clean">OpenCommander\n\n1. Zweck der App\nOpenCommander ist ein lokaler Dateimanager für Android. Die App dient dazu, Dateien und Ordner auf dem Gerät anzuzeigen, zu öffnen, zu kopieren, zu verschieben, als ZIP zu verpacken, ZIP-Archive zu durchsuchen und ausgewählte Dateiaktionen rückgängig zu machen.\n\n2. Kostenlose Nutzung und Lizenz\nDie App wird kostenlos bereitgestellt. Der Nutzer erhält ein einfaches, nicht ausschließliches, nicht übertragbares Recht, die App auf eigenen Android-Geräten zu installieren und bestimmungsgemäß zu verwenden. Eine Weiterveräußerung, Vermietung, missbräuchliche Verbreitung oder Nutzung außerhalb des vorgesehenen Zwecks ist nicht gestattet.\n\n3. Lokale Arbeitsweise\nOpenCommander arbeitet lokal auf dem Gerät. Es gibt kein Benutzerkonto, keine Anmeldung, keine Cloud-Synchronisation, keine Werbung, kein Tracking, keine Analysefunktionen und keine Übertragung von Dateien an den Anbieter. Die App speichert keine Benutzerprofile und keine externen Benutzerdaten auf Servern des Anbieters.\n\n4. Dateizugriff\nDamit ein Dateimanager funktionieren kann, benötigt OpenCommander Zugriff auf Dateien und Ordner des Geräts. Dieser Zugriff wird ausschließlich für die vom Nutzer ausgelösten Funktionen verwendet, insbesondere Anzeigen, Öffnen, Kopieren, Verschieben, ZIP-Erstellen, ZIP-Anzeigen und Rückgängig-Funktionen. Dateien bleiben auf dem Gerät, sofern der Nutzer sie nicht selbst mit anderen Apps öffnet, teilt oder verschiebt.\n\n5. Rückgängig und temporäre Sicherungen\nFür die Rückgängig-Funktion kann OpenCommander temporäre lokale Sicherungen im App-Cache anlegen, insbesondere wenn vorhandene Dateien ersetzt werden. Diese Sicherungen dienen nur der Wiederherstellung innerhalb der App und werden nicht an den Anbieter übertragen.\n\n6. Verantwortung des Nutzers\nDateioperationen können Dateien verändern, ersetzen, verschieben, duplizieren oder löschen. Der Nutzer ist selbst dafür verantwortlich, vor wichtigen Aktionen geeignete Sicherungskopien anzulegen und Dialoge wie Ersetzen oder Behalten sorgfältig zu prüfen. Besonders bei Systemordnern, großen Datenmengen, externen Speichern und synchronisierten Ordnern ist Vorsicht erforderlich.\n\n7. Haftungsausschluss\nDie App wird kostenlos und ohne Zusage einer jederzeitigen Verfügbarkeit, Fehlerfreiheit oder Eignung für einen bestimmten Zweck bereitgestellt. Eine Haftung für Datenverlust, beschädigte Dateien, fehlgeschlagene Kopier- oder Verschiebevorgänge, versehentliche Bedienung, Kompatibilitätsprobleme, Unterbrechungen, Folgeschäden oder entgangene Vorteile ist ausgeschlossen, soweit gesetzlich zulässig. Zwingende gesetzliche Haftung, insbesondere bei Vorsatz, grober Fahrlässigkeit oder Verletzung von Leben, Körper oder Gesundheit, bleibt unberührt.\n\n8. Keine Gewährleistung für fremde Inhalte und Apps\nOpenCommander kann Dateien mit anderen installierten Apps öffnen. Für diese Apps, deren Verhalten, Berechtigungen, Dateiverarbeitung oder Datenschutz ist OpenCommander nicht verantwortlich. Auch für Inhalte, Dateinamen, Dateiformate oder Schäden durch fremde Dateien wird keine Haftung übernommen.\n\n9. Datenschutzrechte\nDa OpenCommander keine Benutzerkonten betreibt, keine Analytics verwendet und keine Dateien an eigene Server überträgt, liegen dem Anbieter im normalen Betrieb keine durch die App erhobenen Nutzungsdaten vor. Soweit ein Nutzer den Anbieter freiwillig kontaktiert, werden die dabei übermittelten Kontaktdaten nur zur Bearbeitung der Anfrage verwendet.\n\n10. Impressum und Kontakt\nAnbieter- und Kontaktangaben ergeben sich aus dem App-Store-Eintrag oder der verlinkten Website des Anbieters. Dort werden die jeweils gesetzlich erforderlichen Informationen bereitgestellt.\n\n11. Änderungen\nDiese Bedingungen können angepasst werden, wenn sich Funktionen, rechtliche Anforderungen oder technische Abläufe ändern. Für neue Funktionen wie Cloud-Zugriff, Synchronisation, Crash-Reporting oder Analysefunktionen würde der Datenschutztext entsprechend erweitert.</string>
     <string name="copy_label">Kopieren (%1$d)</string>
     <string name="move_label">Verschieben (%1$d)</string>
+    <string name="delete_label">Löschen (%1$d)</string>
+    <string name="trash_label">Papierkorb (%1$d)</string>
     <string name="copying_label">Kopieren</string>
     <string name="moving_label">Verschieben</string>
     <string name="cannot_copy_into_self">Ordner kann nicht in sich selbst kopiert werden: %1$s</string>
@@ -67,6 +77,7 @@
     <string name="cannot_create_target_folder">Zielordner konnte nicht erstellt werden: %1$s</string>
     <string name="cannot_create_folder">Ordner konnte nicht erstellt werden: %1$s</string>
     <string name="cannot_delete">Konnte nicht löschen: %1$s</string>
+    <string name="cannot_move_to_trash">Konnte nicht in den Papierkorb verschieben: %1$s</string>
     <string name="zip">ZIP</string>
     <string name="zip_no_selection">Bitte zuerst Dateien oder Ordner auswählen</string>
     <string name="zip_read_only">ZIP-Inhalte sind schreibgeschützt</string>

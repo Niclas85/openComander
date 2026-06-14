@@ -8,6 +8,7 @@
     <string name="undo">Desfazer</string>
     <string name="copy">Copiar</string>
     <string name="move">Mover</string>
+    <string name="delete_button">Excluir</string>
     <string name="dark">Escuro</string>
     <string name="light">Claro</string>
     <string name="language">Idioma</string>
@@ -26,10 +27,17 @@
     <string name="replace">Substituir</string>
     <string name="keep">Manter</string>
     <string name="cancel">Cancelar</string>
+    <string name="delete_title">Excluir seleção?</string>
+    <string name="delete_message">O que fazer com %1$d item(ns) selecionado(s)?</string>
+    <string name="delete_permanent">Excluir</string>
+    <string name="trash">Lixeira</string>
     <string name="copying_items">Copiando %1$d item(ns)...</string>
     <string name="moving_items">Movendo %1$d item(ns)...</string>
+    <string name="deleting_items">Excluindo %1$d item(ns)...</string>
     <string name="copied_items">%1$d item(ns) copiado(s)</string>
     <string name="moved_items">%1$d item(ns) movido(s)</string>
+    <string name="deleted_items">%1$d item(ns) excluído(s)</string>
+    <string name="trashed_items">%1$d item(ns) movido(s) para a lixeira</string>
     <string name="error_prefix">Erro: %1$s</string>
     <string name="undo_empty">Nada para desfazer</string>
     <string name="undo_empty_action">Esta ação está vazia</string>
@@ -59,6 +67,8 @@
     <string name="legal_message">OpenCommander\n\nOs termos, a privacidade e as informações legais atuais estão disponíveis no diálogo legal do app.</string>
     <string name="copy_label">Copiar (%1$d)</string>
     <string name="move_label">Mover (%1$d)</string>
+    <string name="delete_label">Excluir (%1$d)</string>
+    <string name="trash_label">Lixeira (%1$d)</string>
     <string name="copying_label">Copiando</string>
     <string name="moving_label">Movendo</string>
     <string name="cannot_copy_into_self">A pasta não pode ser copiada para dentro de si mesma: %1$s</string>
@@ -66,6 +76,7 @@
     <string name="cannot_create_target_folder">Não foi possível criar a pasta de destino: %1$s</string>
     <string name="cannot_create_folder">Não foi possível criar a pasta: %1$s</string>
     <string name="cannot_delete">Não foi possível excluir: %1$s</string>
+    <string name="cannot_move_to_trash">Não foi possível mover para a lixeira: %1$s</string>
     <string name="zip">ZIP</string>
     <string name="zip_no_selection">Selecione arquivos ou pastas primeiro</string>
     <string name="zip_read_only">O conteúdo ZIP é somente leitura</string>

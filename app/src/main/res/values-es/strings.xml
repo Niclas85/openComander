@@ -8,6 +8,7 @@
     <string name="undo">Deshacer</string>
     <string name="copy">Copiar</string>
     <string name="move">Mover</string>
+    <string name="delete_button">Eliminar</string>
     <string name="dark">Oscuro</string>
     <string name="light">Claro</string>
     <string name="language">Idioma</string>
@@ -26,10 +27,17 @@
     <string name="replace">Reemplazar</string>
     <string name="keep">Conservar</string>
     <string name="cancel">Cancelar</string>
+    <string name="delete_title">¿Eliminar selección?</string>
+    <string name="delete_message">¿Qué quieres hacer con %1$d elemento(s) seleccionado(s)?</string>
+    <string name="delete_permanent">Eliminar</string>
+    <string name="trash">Papelera</string>
     <string name="copying_items">Copiando %1$d elemento(s)...</string>
     <string name="moving_items">Moviendo %1$d elemento(s)...</string>
+    <string name="deleting_items">Eliminando %1$d elemento(s)...</string>
     <string name="copied_items">%1$d elemento(s) copiado(s)</string>
     <string name="moved_items">%1$d elemento(s) movido(s)</string>
+    <string name="deleted_items">%1$d elemento(s) eliminado(s)</string>
+    <string name="trashed_items">%1$d elemento(s) movido(s) a la papelera</string>
     <string name="error_prefix">Error: %1$s</string>
     <string name="undo_empty">Nada que deshacer</string>
     <string name="undo_empty_action">Esta acción está vacía</string>
@@ -59,6 +67,8 @@
     <string name="legal_message">OpenCommander\n\nLos términos, la privacidad y la información legal actuales están disponibles en el diálogo legal de la app.</string>
     <string name="copy_label">Copiar (%1$d)</string>
     <string name="move_label">Mover (%1$d)</string>
+    <string name="delete_label">Eliminar (%1$d)</string>
+    <string name="trash_label">Papelera (%1$d)</string>
     <string name="copying_label">Copiando</string>
     <string name="moving_label">Moviendo</string>
     <string name="cannot_copy_into_self">La carpeta no se puede copiar dentro de sí misma: %1$s</string>
@@ -66,6 +76,7 @@
     <string name="cannot_create_target_folder">No se pudo crear la carpeta de destino: %1$s</string>
     <string name="cannot_create_folder">No se pudo crear la carpeta: %1$s</string>
     <string name="cannot_delete">No se pudo eliminar: %1$s</string>
+    <string name="cannot_move_to_trash">No se pudo mover a la papelera: %1$s</string>
     <string name="zip">ZIP</string>
     <string name="zip_no_selection">Selecciona primero archivos o carpetas</string>
     <string name="zip_read_only">El contenido ZIP es de solo lectura</string>

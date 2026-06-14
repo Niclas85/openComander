@@ -8,6 +8,7 @@
     <string name="undo">Annulla</string>
     <string name="copy">Copia</string>
     <string name="move">Sposta</string>
+    <string name="delete_button">Elimina</string>
     <string name="dark">Scuro</string>
     <string name="light">Chiaro</string>
     <string name="language">Lingua</string>
@@ -26,10 +27,17 @@
     <string name="replace">Sostituisci</string>
     <string name="keep">Mantieni</string>
     <string name="cancel">Annulla</string>
+    <string name="delete_title">Eliminare la selezione?</string>
+    <string name="delete_message">Cosa fare con %1$d elemento/i selezionati?</string>
+    <string name="delete_permanent">Elimina</string>
+    <string name="trash">Cestino</string>
     <string name="copying_items">Copia di %1$d elemento/i...</string>
     <string name="moving_items">Spostamento di %1$d elemento/i...</string>
+    <string name="deleting_items">Eliminazione di %1$d elemento/i...</string>
     <string name="copied_items">%1$d elemento/i copiati</string>
     <string name="moved_items">%1$d elemento/i spostati</string>
+    <string name="deleted_items">%1$d elemento/i eliminati</string>
+    <string name="trashed_items">%1$d elemento/i spostati nel cestino</string>
     <string name="error_prefix">Errore: %1$s</string>
     <string name="undo_empty">Niente da annullare</string>
     <string name="undo_empty_action">Questa azione è vuota</string>
@@ -59,6 +67,8 @@
     <string name="legal_message">OpenCommander\n\nI termini, la privacy e le informazioni legali aggiornate sono disponibili nella finestra legale dell’app.</string>
     <string name="copy_label">Copia (%1$d)</string>
     <string name="move_label">Sposta (%1$d)</string>
+    <string name="delete_label">Elimina (%1$d)</string>
+    <string name="trash_label">Cestino (%1$d)</string>
     <string name="copying_label">Copia</string>
     <string name="moving_label">Spostamento</string>
     <string name="cannot_copy_into_self">La cartella non può essere copiata dentro sé stessa: %1$s</string>
@@ -66,6 +76,7 @@
     <string name="cannot_create_target_folder">Impossibile creare la cartella di destinazione: %1$s</string>
     <string name="cannot_create_folder">Impossibile creare la cartella: %1$s</string>
     <string name="cannot_delete">Impossibile eliminare: %1$s</string>
+    <string name="cannot_move_to_trash">Impossibile spostare nel cestino: %1$s</string>
     <string name="zip">ZIP</string>
     <string name="zip_no_selection">Seleziona prima file o cartelle</string>
     <string name="zip_read_only">I contenuti ZIP sono in sola lettura</string>

@@ -8,6 +8,7 @@
     <string name="undo">Undo</string>
     <string name="copy">Copy</string>
     <string name="move">Move</string>
+    <string name="delete_button">Delete</string>
     <string name="dark">Dark</string>
     <string name="light">Light</string>
     <string name="language">Language</string>
@@ -26,10 +27,17 @@
     <string name="replace">Replace</string>
     <string name="keep">Keep</string>
     <string name="cancel">Cancel</string>
+    <string name="delete_title">Delete selected items?</string>
+    <string name="delete_message">What should happen to %1$d selected item(s)?</string>
+    <string name="delete_permanent">Delete</string>
+    <string name="trash">Trash</string>
     <string name="copying_items">Copying %1$d item(s)...</string>
     <string name="moving_items">Moving %1$d item(s)...</string>
+    <string name="deleting_items">Deleting %1$d item(s)...</string>
     <string name="copied_items">%1$d item(s) copied</string>
     <string name="moved_items">%1$d item(s) moved</string>
+    <string name="deleted_items">%1$d item(s) deleted</string>
+    <string name="trashed_items">%1$d item(s) moved to trash</string>
     <string name="error_prefix">Error: %1$s</string>
     <string name="undo_empty">Nothing to undo</string>
     <string name="undo_empty_action">This action is empty</string>
@@ -60,6 +68,8 @@
     <string name="legal_message_full_clean">OpenCommander\n\n1. Purpose of the app\nOpenCommander is a local file manager for Android. The app lets users view and open files and folders, copy and move items, create ZIP archives, browse ZIP archives and undo selected file operations.\n\n2. Free use and license\nThe app is provided free of charge. The user receives a simple, non-exclusive and non-transferable right to install and use the app on personal Android devices for its intended purpose. Resale, rental, abusive distribution or use outside the intended purpose is not permitted.\n\n3. Local operation\nOpenCommander works locally on the device. There is no user account, no login, no cloud sync, no advertising, no tracking, no analytics and no transfer of files to the provider. The app does not store user profiles or external user data on provider servers.\n\n4. File access\nOpenCommander needs access to files and folders so the file manager can work. This access is used only for user-triggered functions, especially viewing, opening, copying, moving, creating ZIP files, browsing ZIP files and undoing file operations. Files remain on the device unless the user opens, shares or moves them with other apps.\n\n5. Undo and temporary backups\nFor undo functionality, OpenCommander may create temporary local backups in the app cache, especially when existing files are replaced. These backups are used only for restoration inside the app and are not transferred to the provider.\n\n6. User responsibility\nFile operations may change, replace, move, duplicate or delete files. The user is responsible for keeping backups of important data and checking dialogs such as Replace or Keep carefully. Extra care is required for system folders, large data sets, external storage and synced folders.\n\n7. Limitation of liability\nThe app is provided free of charge without any promise of uninterrupted availability, error-free operation or suitability for a particular purpose. Liability for data loss, damaged files, failed copy or move operations, accidental use, compatibility issues, interruptions, consequential damage or lost benefits is excluded to the extent permitted by law. Mandatory statutory liability remains unaffected.\n\n8. Third-party apps and files\nOpenCommander may open files with other installed apps. OpenCommander is not responsible for those apps, their behavior, permissions, file handling or privacy practices. No responsibility is accepted for user content, file names, file formats or damage caused by third-party files.\n\n9. Privacy rights\nBecause OpenCommander does not operate user accounts, use analytics or transfer files to provider servers, the provider normally receives no usage data collected by the app. If a user voluntarily contacts the provider, the submitted contact details are used only to handle the request.\n\n10. Imprint and contact\nProvider and contact details are available in the app store listing or on the linked provider website. Required legal information is made available there.\n\n11. Changes\nThese terms may be updated when features, legal requirements or technical processes change. If features such as cloud access, synchronization, crash reporting or analytics are added, the privacy text will be updated accordingly.</string>
     <string name="copy_label">Copy (%1$d)</string>
     <string name="move_label">Move (%1$d)</string>
+    <string name="delete_label">Delete (%1$d)</string>
+    <string name="trash_label">Trash (%1$d)</string>
     <string name="copying_label">Copying</string>
     <string name="moving_label">Moving</string>
     <string name="cannot_copy_into_self">Folder cannot be copied into itself: %1$s</string>
@@ -67,6 +77,7 @@
     <string name="cannot_create_target_folder">Target folder could not be created: %1$s</string>
     <string name="cannot_create_folder">Folder could not be created: %1$s</string>
     <string name="cannot_delete">Could not delete: %1$s</string>
+    <string name="cannot_move_to_trash">Could not move to trash: %1$s</string>
     <string name="zip">ZIP</string>
     <string name="zip_no_selection">Select files or folders first</string>
     <string name="zip_read_only">ZIP contents are read-only</string>
