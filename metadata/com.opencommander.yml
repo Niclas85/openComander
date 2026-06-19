@@ -1,0 +1,44 @@
+Categories:
+  - System
+  - Utilities
+License: MIT
+AuthorName: OpenCommander contributors
+AuthorEmail: info@opengames.vip
+SourceCode: https://github.com/Niclas85/openComander
+IssueTracker: https://github.com/Niclas85/openComander/issues
+
+AutoName: OpenCommander
+Summary: Local dual-pane file manager without ads or tracking
+Description: |-
+  OpenCommander is a free and open-source dual-pane file manager for Android.
+
+  It is designed for local file organization without an account, ads, tracking or forced cloud sync.
+
+  Features:
+  * Dual-pane file management
+  * Folder tree and file list on both sides
+  * Copy or move mode
+  * Multi-select
+  * Drag and drop between panes
+  * Delete with trash choice
+  * Undo with action history
+  * Browse ZIP archives like folders
+  * Create ZIP archives from selected files and folders
+  * Light and dark theme
+  * Multilingual interface
+
+RepoType: git
+Repo: https://github.com/Niclas85/openComander.git
+
+Builds:
+  - versionName: '1.0'
+    versionCode: 1
+    commit: v1.0.0
+    subdir: .
+    gradle:
+      - yes
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: '1.0'
+CurrentVersionCode: 1

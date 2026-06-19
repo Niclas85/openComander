@@ -1,15 +1,3 @@
-# Google Play Listing EN
-
-## App Name
-
-OpenCommander
-
-## Short Description
-
-Free open-source dual-pane file manager with ZIP, drag & drop and undo.
-
-## Full Description
-
 OpenCommander is a free and open-source file manager for Android. It is built for people who want to organize local files without an account, ads, tracking or forced cloud sync.
 
 The dual-pane layout gives you a classic commander-style workflow: each side has its own folder tree and file list. In landscape mode both sides sit next to each other; in portrait mode they are stacked for smaller screens.
@@ -46,15 +34,3 @@ info@opengames.vip
 Note:
 
 File operations can modify, replace, move or delete files. Please review important actions carefully and keep your own backups for important data.
-
-## Keywords
-
-file manager, file explorer, commander, dual pane, local files, zip manager, open source, no ads, android files, privacy friendly
-
-## Screenshot Captions
-
-1. Two panes for faster file work
-2. Copy or move with drag & drop
-3. Delete, trash and undo actions
-4. Browse ZIP files like folders
-5. Free, open source, no ads

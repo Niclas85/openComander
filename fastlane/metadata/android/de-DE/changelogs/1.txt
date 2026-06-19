@@ -1,0 +1,11 @@
+Erste Version von OpenCommander:
+
+- Zwei-Seiten-Dateimanager fuer Android
+- Kopieren und Verschieben per Drag & Drop
+- Mehrfachauswahl
+- Loeschen mit Papierkorb-Auswahl
+- Rueckgaengig-Historie
+- ZIP-Dateien durchsuchen und erstellen
+- Helles und dunkles Design
+- Mehrsprachige Oberflaeche
+- Keine Werbung, kein Tracking, kein Konto

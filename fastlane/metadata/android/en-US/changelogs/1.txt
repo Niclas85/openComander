@@ -1,0 +1,11 @@
+First OpenCommander release:
+
+- Dual-pane file manager for Android
+- Copy and move with drag & drop
+- Multi-select
+- Delete with trash choice
+- Undo history
+- Browse and create ZIP files
+- Light and dark theme
+- Multilingual interface
+- No ads, no tracking, no account

@@ -1,0 +1,1 @@
+Free open-source dual-pane file manager with ZIP, drag & drop and undo.

@@ -34,7 +34,7 @@ Alternativen:
 
 Kurzbeschreibung:
 
-`Kostenloser Open-Source-Dateimanager mit zwei Fenstern, ZIP, Drag & Drop und Rueckgaengig.`
+`Open-Source-Dateimanager mit zwei Fenstern, ZIP, Drag & Drop und Rueckgaengig.`
 
 Keyword-Schwerpunkte:
 
@@ -64,8 +64,8 @@ Nicht verwenden:
 2. **Kopieren oder verschieben per Drag & Drop.**
    - Datei markiert, Zielseite sichtbar.
 
-3. **Rueckgaengig mit Historie.**
-   - Historie offen, Rueckgaengig sichtbar.
+3. **Loeschen, Papierkorb und Rueckgaengig.**
+   - Loeschdialog, Papierkorb-Auswahl oder Historie sichtbar.
 
 4. **ZIPs wie Ordner oeffnen.**
    - ZIP im Baum oder in Dateiliste sichtbar.
@@ -94,8 +94,9 @@ Badges:
 P0:
 
 - GitHub-Repository mit README, Screenshots, Lizenz und Releases: https://github.com/Niclas85/openComander
-- F-Droid-Einreichung pruefen, sobald Release-Signing und Metadaten stabil sind.
+- F-Droid-Metadaten vorbereiten und nach erstem signierten Release einreichen.
 - Reddit/Foren nur mit ehrlichem Build-Log posten, nicht werblich spammen.
+- Play-Store-Release erst nach Upload-Key, Datenschutz-URL, Impressum und All-Files-Access-Freigabe.
 
 P1:
 
@@ -111,7 +112,7 @@ P2:
 
 ## 7-Tage-Plan
 
-1. Store-Listing aus `playstore/listing-de.md` und `playstore/listing-en.md` finalisieren.
+1. Store-Listing aus `playstore/listing-de.md`, `playstore/listing-en.md` und `fastlane/metadata/android/` finalisieren.
 2. Lizenz und Anbieterangaben pruefen.
 3. README mit Screenshots und Open-Source-Hinweis auf GitHub veroeffentlichen: https://github.com/Niclas85/openComander
 4. Feature Graphic und Screenshots mit den empfohlenen Claims abgleichen.
@@ -121,9 +122,9 @@ P2:
 
 ## 30-Tage-Plan
 
-- Google Play Internal Testing oder Closed Testing.
+- Google Play Internal Testing oder Closed Testing mit signiertem AAB.
 - GitHub Releases mit APK/AAB-Hinweisen.
-- F-Droid-Metadaten vorbereiten.
+- F-Droid-Metadaten aus `metadata/com.opencommander.yml` pruefen und einreichen.
 - 3 kurze Demo-Videos erstellen.
 - Erste Community-Rueckmeldungen in Issues ueberfuehren.
 

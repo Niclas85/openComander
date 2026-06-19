@@ -1,0 +1,1 @@
+Open-Source-Dateimanager mit zwei Fenstern, ZIP, Drag & Drop und Rueckgaengig.
