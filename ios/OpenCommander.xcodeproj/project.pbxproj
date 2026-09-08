@@ -1,0 +1,763 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		C0DE00000000000000000001 /* NTFS3GVolume.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000011 /* NTFS3GVolume.swift */; };
+		C0DE00000000000000000002 /* NTFS3GBridge.c in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000012 /* NTFS3GBridge.c */; };
+		00DB8BB24627133102081997 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C0673250B7AD71D850FB70ED /* PrivacyInfo.xcprivacy */; };
+		03F20A0170EF4FB72D8E8C02 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE743717A2C7E13A6D5D574 /* ViewController.swift */; };
+		07CA7B0472D370DD1972CB0A /* ExtensionFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9984DD8FE90E7E141D915469 /* ExtensionFoundation.framework */; };
+		265F96CCCD80CA3CC9C40F5E /* FSKitBlockDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFFDDFDFE733F8A90755B4 /* FSKitBlockDevice.swift */; };
+		311846D10ED3A56E41EDD175 /* AppReviewVideoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E4B87A901AFDEFE6214623 /* AppReviewVideoTests.swift */; };
+		4A64E77E26EC97CD38490ED8 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6986E2639AFB0C4E362CD85C /* Localization.swift */; };
+		510EFA53657E909B5C734B36 /* FileEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 556918D3DC87DF614F200378 /* FileEntry.swift */; };
+		527C7E2B21C62698CEEB1190 /* Localization-vi.json in Resources */ = {isa = PBXBuildFile; fileRef = B8BFB0D7FE8A26F807E55EE1 /* Localization-vi.json */; };
+		56DDDB0283BDE7F5CFDAB9C5 /* Localization-pl.json in Resources */ = {isa = PBXBuildFile; fileRef = C4F075BA945697CBCE974B1C /* Localization-pl.json */; };
+		5C922AF2C3FCB1F42B83D957 /* OpenCommanderNTFSFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC2FB1317E73BB36FF72AF3C /* OpenCommanderNTFSFileSystem.swift */; };
+		66FD241B56D3FB5B06D8A04B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4CADCE370033D94E97C19D6C /* Assets.xcassets */; };
+		6C559C09C5FBB991C10E8589 /* Localization-tr.json in Resources */ = {isa = PBXBuildFile; fileRef = 078C1E7DEFF0D9A91F06BAEC /* Localization-tr.json */; };
+		6DC745F68BCEB7A65EA35B90 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = C0291728F2FBA6D34CE4542C /* ZIPFoundation */; };
+		71D10DF294C56A43F58AA1DC /* Localization-ar.json in Resources */ = {isa = PBXBuildFile; fileRef = 177BF22CC72C73144BF8A901 /* Localization-ar.json */; };
+		7624D699D7685B035D693FF1 /* Localization-uk.json in Resources */ = {isa = PBXBuildFile; fileRef = 05AB405816834DF76C0BAA55 /* Localization-uk.json */; };
+		7752F39EDE1DFBA7F212A7C5 /* Localization-th.json in Resources */ = {isa = PBXBuildFile; fileRef = 099845F35670CF252CB78D35 /* Localization-th.json */; };
+		824B8AABBC69CABB4942E6E9 /* Localization-zh-Hans.json in Resources */ = {isa = PBXBuildFile; fileRef = 60F178FA61723E8C1BF4AD7B /* Localization-zh-Hans.json */; };
+		8A2086C0EB87945D09D27011 /* Localization-ja.json in Resources */ = {isa = PBXBuildFile; fileRef = D9DB7B1EDA4BAD9EFE7836B9 /* Localization-ja.json */; };
+		8AE5E5567594ACB388CCEF2B /* FSKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 449C74007FBF552E615E5322 /* FSKit.framework */; };
+		8BC681367A8954F0784955B7 /* MacFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = F219C47843C16EA558A06ACE /* MacFileSystem.swift */; };
+		97274A9268414DC87B91432F /* Localization-ko.json in Resources */ = {isa = PBXBuildFile; fileRef = 6FE9CF11B4608B9121F10C4E /* Localization-ko.json */; };
+		97349B0FB0B561EFF33A37DC /* Pane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94CC4B1913961E80450FB1DF /* Pane.swift */; };
+		A39D2B39C5BDD442BCA25D52 /* Localization-hi.json in Resources */ = {isa = PBXBuildFile; fileRef = E5C5B68809E3A9A3AA0D48DC /* Localization-hi.json */; };
+		B4E7D564271B990A055483B8 /* OpenCommanderNTFSModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = B417EBE17452B1062075AA93 /* OpenCommanderNTFSModule.swift */; };
+		BC43A7E9E10BA8FCE7051372 /* Localization-sv.json in Resources */ = {isa = PBXBuildFile; fileRef = 5042823229407BA318732EAB /* Localization-sv.json */; };
+		C6E7391308E5369B807DC564 /* Localization-ru.json in Resources */ = {isa = PBXBuildFile; fileRef = AB62077966371C61F4BA1B25 /* Localization-ru.json */; };
+		CD60EEF647CC5A14EC336739 /* Localization-id.json in Resources */ = {isa = PBXBuildFile; fileRef = 6816D7D810D1AC773BCDAF80 /* Localization-id.json */; };
+		D78142BF3E7FB6427ADC9A63 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4446BB5DED9CF5F765ACB678 /* AppDelegate.swift */; };
+		E7BB8DCEA9F0DF8D4A526915 /* OpenCommanderNTFS in Frameworks */ = {isa = PBXBuildFile; productRef = 19B3F843E9A60434AB224BDE /* OpenCommanderNTFS */; };
+		E9CEBAAB2331024621052656 /* OpenCommanderNTFSModule.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = 83A833B5F153635B4ADB8FDC /* OpenCommanderNTFSModule.appex */; platformFilter = maccatalyst; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		48576129C6CA407C05C96F75 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B40AE4368478278C4D234276 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA5F057D168538E2680754BB;
+			remoteInfo = OpenCommander;
+		};
+		8117024D5A7BA0532638C5DD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B40AE4368478278C4D234276 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 535682510FAF9394ABA0A62B;
+			remoteInfo = OpenCommanderNTFSModule;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		500F0F4397A51D91361E950E /* Embed ExtensionKit Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
+			files = (
+				E9CEBAAB2331024621052656 /* OpenCommanderNTFSModule.appex in Embed ExtensionKit Extensions */,
+			);
+			name = "Embed ExtensionKit Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		C0DE00000000000000000011 /* NTFS3GVolume.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NTFS3GVolume.swift; sourceTree = "<group>"; };
+		C0DE00000000000000000012 /* NTFS3GBridge.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = NTFS3GBridge.c; sourceTree = "<group>"; };
+		C0DE00000000000000000013 /* NTFS3GBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NTFS3GBridge.h; sourceTree = "<group>"; };
+		C0DE00000000000000000014 /* NTFS3G.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = NTFS3G.xcconfig; sourceTree = "<group>"; };
+		05AB405816834DF76C0BAA55 /* Localization-uk.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Localization-uk.json"; sourceTree = "<group>"; };
+		078C1E7DEFF0D9A91F06BAEC /* Localization-tr.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Localization-tr.json"; sourceTree = "<group>"; };
+		099845F35670CF252CB78D35 /* Localization-th.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Localization-th.json"; sourceTree = "<group>"; };
+		177BF22CC72C73144BF8A901 /* Localization-ar.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Localization-ar.json"; sourceTree = "<group>"; };
+		27E4B87A901AFDEFE6214623 /* AppReviewVideoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppReviewVideoTests.swift; sourceTree = "<group>"; };
+		4446BB5DED9CF5F765ACB678 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		449C74007FBF552E615E5322 /* FSKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FSKit.framework; path = System/Library/Frameworks/FSKit.framework; sourceTree = SDKROOT; };
+		451F9645206C7B9C7FB2FA8D /* OpenCommanderNTFS */ = {isa = PBXFileReference; lastKnownFileType = folder; name = OpenCommanderNTFS; path = ../ntfs/OpenCommanderNTFS; sourceTree = SOURCE_ROOT; };
+		4CADCE370033D94E97C19D6C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		5042823229407BA318732EAB /* Localization-sv.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Localization-sv.json"; sourceTree = "<group>"; };
+		556918D3DC87DF614F200378 /* FileEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileEntry.swift; sourceTree = "<group>"; };
+		5B94884FA6967AD7E1E7AF17 /* OpenCommanderUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = OpenCommanderUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		60F178FA61723E8C1BF4AD7B /* Localization-zh-Hans.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Localization-zh-Hans.json"; sourceTree = "<group>"; };
+		6816D7D810D1AC773BCDAF80 /* Localization-id.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Localization-id.json"; sourceTree = "<group>"; };
+		6986E2639AFB0C4E362CD85C /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
+		6FE9CF11B4608B9121F10C4E /* Localization-ko.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Localization-ko.json"; sourceTree = "<group>"; };
+		83A833B5F153635B4ADB8FDC /* OpenCommanderNTFSModule.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.extensionkit-extension"; includeInIndex = 0; path = OpenCommanderNTFSModule.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		94CC4B1913961E80450FB1DF /* Pane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pane.swift; sourceTree = "<group>"; };
+		9984DD8FE90E7E141D915469 /* ExtensionFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ExtensionFoundation.framework; path = System/Library/Frameworks/ExtensionFoundation.framework; sourceTree = SDKROOT; };
+		AB62077966371C61F4BA1B25 /* Localization-ru.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Localization-ru.json"; sourceTree = "<group>"; };
+		B417EBE17452B1062075AA93 /* OpenCommanderNTFSModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCommanderNTFSModule.swift; sourceTree = "<group>"; };
+		B8BFB0D7FE8A26F807E55EE1 /* Localization-vi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Localization-vi.json"; sourceTree = "<group>"; };
+		BBE743717A2C7E13A6D5D574 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		BC2FB1317E73BB36FF72AF3C /* OpenCommanderNTFSFileSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCommanderNTFSFileSystem.swift; sourceTree = "<group>"; };
+		C0673250B7AD71D850FB70ED /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		C0FFFDDFDFE733F8A90755B4 /* FSKitBlockDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FSKitBlockDevice.swift; sourceTree = "<group>"; };
+		C4F075BA945697CBCE974B1C /* Localization-pl.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Localization-pl.json"; sourceTree = "<group>"; };
+		D9DB7B1EDA4BAD9EFE7836B9 /* Localization-ja.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Localization-ja.json"; sourceTree = "<group>"; };
+		E1DBBB265AA7750A08DA0F19 /* OpenCommander.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = OpenCommander.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E5C5B68809E3A9A3AA0D48DC /* Localization-hi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Localization-hi.json"; sourceTree = "<group>"; };
+		F219C47843C16EA558A06ACE /* MacFileSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFileSystem.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		65487D88ADE12A608EDA02F3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6DC745F68BCEB7A65EA35B90 /* ZIPFoundation in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C499B5B6AE26425A32B51167 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E7BB8DCEA9F0DF8D4A526915 /* OpenCommanderNTFS in Frameworks */,
+				8AE5E5567594ACB388CCEF2B /* FSKit.framework in Frameworks */,
+				07CA7B0472D370DD1972CB0A /* ExtensionFoundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		07934F0F9D5872CFE7AC5AB8 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				9984DD8FE90E7E141D915469 /* ExtensionFoundation.framework */,
+				449C74007FBF552E615E5322 /* FSKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		0E1A43017A3ABCF26CDACD2B /* OpenCommander */ = {
+			isa = PBXGroup;
+			children = (
+				4446BB5DED9CF5F765ACB678 /* AppDelegate.swift */,
+				4CADCE370033D94E97C19D6C /* Assets.xcassets */,
+				556918D3DC87DF614F200378 /* FileEntry.swift */,
+				177BF22CC72C73144BF8A901 /* Localization-ar.json */,
+				E5C5B68809E3A9A3AA0D48DC /* Localization-hi.json */,
+				6816D7D810D1AC773BCDAF80 /* Localization-id.json */,
+				D9DB7B1EDA4BAD9EFE7836B9 /* Localization-ja.json */,
+				6FE9CF11B4608B9121F10C4E /* Localization-ko.json */,
+				C4F075BA945697CBCE974B1C /* Localization-pl.json */,
+				AB62077966371C61F4BA1B25 /* Localization-ru.json */,
+				5042823229407BA318732EAB /* Localization-sv.json */,
+				099845F35670CF252CB78D35 /* Localization-th.json */,
+				078C1E7DEFF0D9A91F06BAEC /* Localization-tr.json */,
+				05AB405816834DF76C0BAA55 /* Localization-uk.json */,
+				B8BFB0D7FE8A26F807E55EE1 /* Localization-vi.json */,
+				60F178FA61723E8C1BF4AD7B /* Localization-zh-Hans.json */,
+				6986E2639AFB0C4E362CD85C /* Localization.swift */,
+				F219C47843C16EA558A06ACE /* MacFileSystem.swift */,
+				94CC4B1913961E80450FB1DF /* Pane.swift */,
+				C0673250B7AD71D850FB70ED /* PrivacyInfo.xcprivacy */,
+				BBE743717A2C7E13A6D5D574 /* ViewController.swift */,
+			);
+			path = OpenCommander;
+			sourceTree = "<group>";
+		};
+		58F9C48FC775D790A21396B5 = {
+			isa = PBXGroup;
+			children = (
+				0E1A43017A3ABCF26CDACD2B /* OpenCommander */,
+				9ECD2A26E38886CF7982F286 /* OpenCommanderNTFSModule */,
+				7F9F241FAF0BA5AB6C4E5F9B /* OpenCommanderUITests */,
+				ED82A1FB0FB1D07FB06CE8CB /* Packages */,
+				07934F0F9D5872CFE7AC5AB8 /* Frameworks */,
+				FA3E43236442B00C5DA066E6 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		7F9F241FAF0BA5AB6C4E5F9B /* OpenCommanderUITests */ = {
+			isa = PBXGroup;
+			children = (
+				27E4B87A901AFDEFE6214623 /* AppReviewVideoTests.swift */,
+			);
+			path = OpenCommanderUITests;
+			sourceTree = "<group>";
+		};
+		9ECD2A26E38886CF7982F286 /* OpenCommanderNTFSModule */ = {
+			isa = PBXGroup;
+			children = (
+				C0DE00000000000000000011 /* NTFS3GVolume.swift */,
+				C0DE00000000000000000012 /* NTFS3GBridge.c */,
+				C0DE00000000000000000013 /* NTFS3GBridge.h */,
+				C0DE00000000000000000014 /* NTFS3G.xcconfig */,
+				C0FFFDDFDFE733F8A90755B4 /* FSKitBlockDevice.swift */,
+				BC2FB1317E73BB36FF72AF3C /* OpenCommanderNTFSFileSystem.swift */,
+				B417EBE17452B1062075AA93 /* OpenCommanderNTFSModule.swift */,
+			);
+			path = OpenCommanderNTFSModule;
+			sourceTree = "<group>";
+		};
+		ED82A1FB0FB1D07FB06CE8CB /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				451F9645206C7B9C7FB2FA8D /* OpenCommanderNTFS */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		FA3E43236442B00C5DA066E6 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E1DBBB265AA7750A08DA0F19 /* OpenCommander.app */,
+				83A833B5F153635B4ADB8FDC /* OpenCommanderNTFSModule.appex */,
+				5B94884FA6967AD7E1E7AF17 /* OpenCommanderUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		535682510FAF9394ABA0A62B /* OpenCommanderNTFSModule */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 40904C5085FFC52BAFF76586 /* Build configuration list for PBXNativeTarget "OpenCommanderNTFSModule" */;
+			buildPhases = (
+				C0DE00000000000000000020 /* Build NTFS-3G engine */,
+				2D748C0EB7CAA662C857EF35 /* Sources */,
+				C499B5B6AE26425A32B51167 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = OpenCommanderNTFSModule;
+			packageProductDependencies = (
+				19B3F843E9A60434AB224BDE /* OpenCommanderNTFS */,
+			);
+			productName = OpenCommanderNTFSModule;
+			productReference = 83A833B5F153635B4ADB8FDC /* OpenCommanderNTFSModule.appex */;
+			productType = "com.apple.product-type.extensionkit-extension";
+		};
+		85A7DC1B671D3EF0DAF918E7 /* OpenCommanderUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9FEBD1E60B28D47AA622929A /* Build configuration list for PBXNativeTarget "OpenCommanderUITests" */;
+			buildPhases = (
+				64A5E6327DD2C27AB21EC10F /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C585D13E4F63063F7ECFEF27 /* PBXTargetDependency */,
+			);
+			name = OpenCommanderUITests;
+			packageProductDependencies = (
+			);
+			productName = OpenCommanderUITests;
+			productReference = 5B94884FA6967AD7E1E7AF17 /* OpenCommanderUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		AA5F057D168538E2680754BB /* OpenCommander */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E00DBB1612B94F9E4DD9E3D7 /* Build configuration list for PBXNativeTarget "OpenCommander" */;
+			buildPhases = (
+				664B47E5B1BD4453AB12B48C /* Sources */,
+				AE61A00DE1C9FF2C2478036D /* Resources */,
+				65487D88ADE12A608EDA02F3 /* Frameworks */,
+				500F0F4397A51D91361E950E /* Embed ExtensionKit Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CE8573530714CA241606170A /* PBXTargetDependency */,
+			);
+			name = OpenCommander;
+			packageProductDependencies = (
+				C0291728F2FBA6D34CE4542C /* ZIPFoundation */,
+			);
+			productName = OpenCommander;
+			productReference = E1DBBB265AA7750A08DA0F19 /* OpenCommander.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B40AE4368478278C4D234276 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					535682510FAF9394ABA0A62B = {
+						DevelopmentTeam = WB497999XX;
+						ProvisioningStyle = Automatic;
+					};
+					85A7DC1B671D3EF0DAF918E7 = {
+						DevelopmentTeam = WB497999XX;
+						ProvisioningStyle = Automatic;
+						TestTargetID = AA5F057D168538E2680754BB;
+					};
+					AA5F057D168538E2680754BB = {
+						DevelopmentTeam = WB497999XX;
+					};
+				};
+			};
+			buildConfigurationList = C391638DDC24CC8515F988E6 /* Build configuration list for PBXProject "OpenCommander" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 58F9C48FC775D790A21396B5;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				166D5B425D96A16E112D05D7 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+				F8C8FCF41EAB87F55C3BEEA1 /* XCLocalSwiftPackageReference "../ntfs/OpenCommanderNTFS" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = FA3E43236442B00C5DA066E6 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA5F057D168538E2680754BB /* OpenCommander */,
+				535682510FAF9394ABA0A62B /* OpenCommanderNTFSModule */,
+				85A7DC1B671D3EF0DAF918E7 /* OpenCommanderUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AE61A00DE1C9FF2C2478036D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				66FD241B56D3FB5B06D8A04B /* Assets.xcassets in Resources */,
+				71D10DF294C56A43F58AA1DC /* Localization-ar.json in Resources */,
+				A39D2B39C5BDD442BCA25D52 /* Localization-hi.json in Resources */,
+				CD60EEF647CC5A14EC336739 /* Localization-id.json in Resources */,
+				8A2086C0EB87945D09D27011 /* Localization-ja.json in Resources */,
+				97274A9268414DC87B91432F /* Localization-ko.json in Resources */,
+				56DDDB0283BDE7F5CFDAB9C5 /* Localization-pl.json in Resources */,
+				C6E7391308E5369B807DC564 /* Localization-ru.json in Resources */,
+				BC43A7E9E10BA8FCE7051372 /* Localization-sv.json in Resources */,
+				7752F39EDE1DFBA7F212A7C5 /* Localization-th.json in Resources */,
+				6C559C09C5FBB991C10E8589 /* Localization-tr.json in Resources */,
+				7624D699D7685B035D693FF1 /* Localization-uk.json in Resources */,
+				527C7E2B21C62698CEEB1190 /* Localization-vi.json in Resources */,
+				824B8AABBC69CABB4942E6E9 /* Localization-zh-Hans.json in Resources */,
+				00DB8BB24627133102081997 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		C0DE00000000000000000020 /* Build NTFS-3G engine */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ("$(PROJECT_DIR)/../ntfs/NTFS3G/build-engine.sh", "$(PROJECT_DIR)/../ntfs/NTFS3G/vendor/ntfs-3g_ntfsprogs-2026.7.7.tgz");
+			outputPaths = ("$(PROJECT_DIR)/../ntfs/NTFS3G/.build-native/ntfs-3g-2026.7.7/libntfs-3g/.libs/libntfs-3g.a", "$(PROJECT_DIR)/../ntfs/NTFS3G/.build-native/ntfs-3g-2026.7.7/config.h");
+			name = "Build NTFS-3G engine";
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "sh \"$PROJECT_DIR/../ntfs/NTFS3G/build-engine.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2D748C0EB7CAA662C857EF35 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0DE00000000000000000001 /* NTFS3GVolume.swift in Sources */,
+				C0DE00000000000000000002 /* NTFS3GBridge.c in Sources */,
+				265F96CCCD80CA3CC9C40F5E /* FSKitBlockDevice.swift in Sources */,
+				5C922AF2C3FCB1F42B83D957 /* OpenCommanderNTFSFileSystem.swift in Sources */,
+				B4E7D564271B990A055483B8 /* OpenCommanderNTFSModule.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		64A5E6327DD2C27AB21EC10F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				311846D10ED3A56E41EDD175 /* AppReviewVideoTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		664B47E5B1BD4453AB12B48C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D78142BF3E7FB6427ADC9A63 /* AppDelegate.swift in Sources */,
+				510EFA53657E909B5C734B36 /* FileEntry.swift in Sources */,
+				4A64E77E26EC97CD38490ED8 /* Localization.swift in Sources */,
+				8BC681367A8954F0784955B7 /* MacFileSystem.swift in Sources */,
+				97349B0FB0B561EFF33A37DC /* Pane.swift in Sources */,
+				03F20A0170EF4FB72D8E8C02 /* ViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C585D13E4F63063F7ECFEF27 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA5F057D168538E2680754BB /* OpenCommander */;
+			targetProxy = 48576129C6CA407C05C96F75 /* PBXContainerItemProxy */;
+		};
+		CE8573530714CA241606170A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = maccatalyst;
+			target = 535682510FAF9394ABA0A62B /* OpenCommanderNTFSModule */;
+			targetProxy = 8117024D5A7BA0532638C5DD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		16FE8EDE0A29A17323C2ABB6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C0DE00000000000000000014 /* NTFS3G.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = OpenCommanderNTFSModule/OpenCommanderNTFSModule.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = WB497999XX;
+				ENABLE_APP_SANDBOX = YES;
+				INFOPLIST_FILE = OpenCommanderNTFSModule/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "OpenCommander NTFS";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.4;
+				MARKETING_VERSION = 1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.github.niklaus85.OpenCommander.NTFSModule;
+				PRODUCT_NAME = OpenCommanderNTFSModule;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		442894775C33CEFA942CA060 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 8;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+				DEVELOPMENT_TEAM = WB497999XX;
+				GENERATE_INFOPLIST = YES;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.github.niklaus85.OpenCommander;
+				PROVISIONING_PROFILE_SPECIFIER = "OpenCommander App Store";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		498DCEEECC8D3A940CFF2551 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = WB497999XX;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.github.niklaus85.OpenCommander.UITests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = OpenCommander;
+			};
+			name = Debug;
+		};
+		6A39EC4E6B860B71106F5F42 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 8;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+				DEVELOPMENT_TEAM = WB497999XX;
+				GENERATE_INFOPLIST = YES;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.github.niklaus85.OpenCommander;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		79A667E9E706CA3598F48225 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		975D904964477D1EA02EE29B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A448B05B8FD79581A591C051 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = WB497999XX;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.github.niklaus85.OpenCommander.UITests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = OpenCommander;
+			};
+			name = Release;
+		};
+		D4548FD80C3C013C941CDDAC /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C0DE00000000000000000014 /* NTFS3G.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = OpenCommanderNTFSModule/OpenCommanderNTFSModule.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = WB497999XX;
+				ENABLE_APP_SANDBOX = YES;
+				INFOPLIST_FILE = OpenCommanderNTFSModule/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "OpenCommander NTFS";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.4;
+				MARKETING_VERSION = 1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.github.niklaus85.OpenCommander.NTFSModule;
+				PRODUCT_NAME = OpenCommanderNTFSModule;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		40904C5085FFC52BAFF76586 /* Build configuration list for PBXNativeTarget "OpenCommanderNTFSModule" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				16FE8EDE0A29A17323C2ABB6 /* Debug */,
+				D4548FD80C3C013C941CDDAC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9FEBD1E60B28D47AA622929A /* Build configuration list for PBXNativeTarget "OpenCommanderUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				498DCEEECC8D3A940CFF2551 /* Debug */,
+				A448B05B8FD79581A591C051 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C391638DDC24CC8515F988E6 /* Build configuration list for PBXProject "OpenCommander" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				79A667E9E706CA3598F48225 /* Debug */,
+				975D904964477D1EA02EE29B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E00DBB1612B94F9E4DD9E3D7 /* Build configuration list for PBXNativeTarget "OpenCommander" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6A39EC4E6B860B71106F5F42 /* Debug */,
+				442894775C33CEFA942CA060 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		F8C8FCF41EAB87F55C3BEEA1 /* XCLocalSwiftPackageReference "../ntfs/OpenCommanderNTFS" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../ntfs/OpenCommanderNTFS;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		166D5B425D96A16E112D05D7 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.19;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		19B3F843E9A60434AB224BDE /* OpenCommanderNTFS */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OpenCommanderNTFS;
+		};
+		C0291728F2FBA6D34CE4542C /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 166D5B425D96A16E112D05D7 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = B40AE4368478278C4D234276 /* Project object */;
+}

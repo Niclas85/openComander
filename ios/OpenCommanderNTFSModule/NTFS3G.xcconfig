@@ -1,0 +1,6 @@
+// GPL-2.0-or-later engine integration; build via ntfs/NTFS3G/build-engine.sh.
+ENABLE_USER_SCRIPT_SANDBOXING = NO
+HEADER_SEARCH_PATHS = $(inherited) "$(PROJECT_DIR)/../ntfs/NTFS3G/.build-native/ntfs-3g-2026.7.7" "$(PROJECT_DIR)/../ntfs/NTFS3G/.build-native/ntfs-3g-2026.7.7/include" "$(PROJECT_DIR)/../ntfs/NTFS3G/.build-native/ntfs-3g-2026.7.7/include/ntfs-3g"
+GCC_PREPROCESSOR_DEFINITIONS = $(inherited) HAVE_CONFIG_H=1
+SWIFT_OBJC_BRIDGING_HEADER = $(PROJECT_DIR)/OpenCommanderNTFSModule/NTFS3GBridge.h
+OTHER_LDFLAGS = $(inherited) "$(PROJECT_DIR)/../ntfs/NTFS3G/.build-native/ntfs-3g-2026.7.7/libntfs-3g/.libs/libntfs-3g.a" -framework CoreFoundation
