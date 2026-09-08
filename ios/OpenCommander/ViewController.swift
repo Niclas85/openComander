@@ -149,6 +149,8 @@ class ViewController: UIViewController {
     var rightPane: CommanderPane!
     weak var activePane: CommanderPane?
     weak var activeDragPane: CommanderPane?
+    var externalDropInProgress = false
+    private(set) var fileOperationInProgress = false
     var historyExpanded = false
     var moveMode = false
     private var operationInProgress = false
@@ -446,6 +448,13 @@ class ViewController: UIViewController {
     }
 
     override var keyCommands: [UIKeyCommand]? {
+        // Do not intercept Return, Delete, Cmd-C/V or Space while the user
+        // edits a destination path (or a text field in a presented dialog).
+        func editingText(in view: UIView) -> Bool {
+            if view.isFirstResponder && view is UITextInput { return true }
+            return view.subviews.contains { editingText(in: $0) }
+        }
+        if let window = viewIfLoaded?.window, editingText(in: window) { return super.keyCommands }
         let command: UIKeyModifierFlags = .command
         func key(_ title: String, _ input: String, _ modifiers: UIKeyModifierFlags, _ action: Selector) -> UIKeyCommand {
             let result = UIKeyCommand(
@@ -1005,20 +1014,70 @@ extension ViewController {
             return
         }
         
-        let sources = sourcePane.selectedEntries()
+        runFileOperation(sources: sourcePane.selectedEntries(), sourcePane: sourcePane,
+                         targetDirectory: targetDirectory, move: moveMode)
+    }
+
+    func receiveExternalDrop(providers: [NSItemProvider], targetDirectory: FileEntry) {
+        guard !externalDropInProgress, !fileOperationInProgress, presentedViewController == nil,
+              targetDirectory.canWriteDirectory() else { return }
+        externalDropInProgress = true
+        let requestedMove = moveMode
+        updateGlobalStatus(L10n.get("drop_loading"))
+        FileDropTransfer.load(providers) { [weak self] result in
+            guard let self else {
+                if case .success(let batch) = result { batch.releaseResources() }
+                return
+            }
+            switch result {
+            case .failure(let error):
+                self.externalDropInProgress = false
+                self.updateGlobalStatus(String(format: L10n.get("error_prefix"), error.localizedDescription))
+            case .success(let batch):
+                if requestedMove && batch.items.contains(where: { !$0.isOriginal }) {
+                    batch.releaseResources()
+                    self.externalDropInProgress = false
+                    self.showScrollableDialog(title: L10n.get("operation_mode_move"), message: L10n.get("drop_original_unavailable"))
+                    return
+                }
+                self.runFileOperation(sources: batch.items.map { FileEntry(url: $0.url, parent: nil) },
+                                      sourcePane: nil, targetDirectory: targetDirectory, move: requestedMove) {
+                    // Retain provider resources through conflict prompts and I/O.
+                    batch.releaseResources()
+                    self.externalDropInProgress = false
+                }
+            }
+        }
+    }
+
+    func runFileOperation(sources: [FileEntry], sourcePane: CommanderPane?, targetDirectory: FileEntry,
+                          move: Bool, completion: @escaping () -> Void = {}) {
+        guard !fileOperationInProgress, presentedViewController == nil else {
+            updateGlobalStatus(L10n.get("drop_busy"))
+            completion()
+            return
+        }
         if sources.isEmpty {
             updateGlobalStatus(L10n.get("no_readable_selection"))
+            completion()
             return
         }
         guard targetDirectory.canWriteDirectory() else {
             updateGlobalStatus(L10n.get("target_not_writable"))
+            completion()
             return
         }
         guard sources.allSatisfy({ $0.isPhysical() }) else {
             updateGlobalStatus(L10n.get("zip_read_only"))
+            completion()
             return
         }
 
+        fileOperationInProgress = true
+        let finished = {
+            self.fileOperationInProgress = false
+            completion()
+        }
         let conflicts = sources.filter {
             let destination = targetDirectory.url.appendingPathComponent($0.name())
             return destination.standardizedFileURL != $0.url.standardizedFileURL && FileManager.default.fileExists(atPath: destination.path)
@@ -1030,20 +1089,19 @@ extension ViewController {
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: L10n.get("replace"), style: .destructive) { _ in
-                self.executeFileOperation(sourcePane: sourcePane, targetDirectory: targetDirectory, sources: sources, replace: true)
+                self.executeFileOperation(sourcePane: sourcePane, targetDirectory: targetDirectory, sources: sources, move: move, replace: true, completion: finished)
             })
             alert.addAction(UIAlertAction(title: L10n.get("keep"), style: .default) { _ in
-                self.executeFileOperation(sourcePane: sourcePane, targetDirectory: targetDirectory, sources: sources, replace: false)
+                self.executeFileOperation(sourcePane: sourcePane, targetDirectory: targetDirectory, sources: sources, move: move, replace: false, completion: finished)
             })
-            alert.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel))
+            alert.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel) { _ in finished() })
             present(alert, animated: true)
             return
         }
-        executeFileOperation(sourcePane: sourcePane, targetDirectory: targetDirectory, sources: sources, replace: false)
+        executeFileOperation(sourcePane: sourcePane, targetDirectory: targetDirectory, sources: sources, move: move, replace: false, completion: finished)
     }
 
-    private func executeFileOperation(sourcePane: CommanderPane, targetDirectory: FileEntry, sources: [FileEntry], replace: Bool) {
-        let move = moveMode
+    private func executeFileOperation(sourcePane: CommanderPane?, targetDirectory: FileEntry, sources: [FileEntry], move: Bool, replace: Bool, completion: @escaping () -> Void) {
         showProgress(String(format: L10n.get(move ? "moving_items" : "copying_items"), sources.count), progress: 0)
         DispatchQueue.global(qos: .userInitiated).async {
             let fm = FileManager.default
@@ -1097,13 +1155,14 @@ extension ViewController {
             DispatchQueue.main.async {
                 if move && !movedFiles.isEmpty { self.operationHistory.append(.move(files: movedFiles)) }
                 if !move && !copiedFiles.isEmpty { self.operationHistory.append(.copy(files: copiedFiles)) }
-                self.refreshAllPanes(clearSelectionIn: [sourcePane])
+                self.refreshAllPanes(clearSelectionIn: sourcePane.map { [$0] } ?? [])
                 if let failure {
                     self.finishProgress(String(format: L10n.get("error_prefix"), failure.localizedDescription))
                 } else {
                     let count = move ? movedFiles.count : copiedFiles.count
                     self.finishProgress(String(format: L10n.get(move ? "moved_items" : "copied_items"), count))
                 }
+                completion()
             }
         }
     }
@@ -1334,6 +1393,7 @@ extension ViewController {
     
     @objc func showHelpDialog() {
         var sections = [L10n.get("help_message")]
+        sections.append(L10n.get("help_external_drop"))
 #if targetEnvironment(macCatalyst)
         sections.append(L10n.get("help_access_macos"))
         sections.append(macKeyboardShortcutsHelp())

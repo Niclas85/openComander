@@ -495,16 +495,19 @@ extension CommanderPane: UITableViewDragDelegate, UITableViewDropDelegate {
         fileList.dragDelegate = self
         fileList.dropDelegate = self
         fileList.dragInteractionEnabled = true
+        treeList.dragDelegate = self
         treeList.dropDelegate = self
+        treeList.dragInteractionEnabled = true
     }
     
     // MARK: - Drag Delegate
     
     func tableView(_ tableView: UITableView, itemsForBeginning session: UIDragSession, at indexPath: IndexPath) -> [UIDragItem] {
-        guard tableView === fileList, indexPath.section == 0,
-              visibleEntries.indices.contains(indexPath.row) else { return [] }
-        let entry = visibleEntries[indexPath.row]
-        if entry.isUpButton { return [] }
+        guard indexPath.section == 0 else { return [] }
+        let entries = tableView === treeList ? flatTree.map(\.entry) : visibleEntries
+        guard entries.indices.contains(indexPath.row) else { return [] }
+        let entry = entries[indexPath.row]
+        if entry.isUpButton || !entry.isPhysical() { return [] }
         
         if !selectedKeys.contains(entry.key()) {
             selectedKeys.insert(entry.key())
@@ -513,13 +516,10 @@ extension CommanderPane: UITableViewDragDelegate, UITableViewDropDelegate {
         
         viewController?.activeDragPane = self
         session.localContext = self
-        return visibleEntries.compactMap { entry in
-            guard selectedKeys.contains(entry.key()), entry.isPhysical() else { return nil }
-            // The transfer itself is performed from localObject. Registering NSURL
-            // explicitly keeps local directory drags reliable on iPhone/iPad and in
-            // the simulator, where NSItemProvider(contentsOf:) may return nil.
-            let provider = NSItemProvider(object: entry.url as NSURL)
-            provider.suggestedName = entry.name()
+        let dragged = tableView === treeList ? [entry] : visibleEntries.filter { selectedKeys.contains($0.key()) }
+        return dragged.compactMap { entry in
+            guard entry.isPhysical(), !entry.isUpButton else { return nil }
+            let provider = FileDropTransfer.provider(for: entry.url)
             let item = UIDragItem(itemProvider: provider)
             item.localObject = entry
             return item
@@ -529,41 +529,62 @@ extension CommanderPane: UITableViewDragDelegate, UITableViewDropDelegate {
     // MARK: - Drop Delegate
     
     func tableView(_ tableView: UITableView, canHandle session: UIDropSession) -> Bool {
-        return session.localDragSession?.localContext is CommanderPane
-            || viewController?.activeDragPane != nil
+        guard viewController?.externalDropInProgress != true, viewController?.fileOperationInProgress != true,
+              viewController?.presentedViewController == nil, !session.items.isEmpty else { return false }
+        if session.localDragSession?.localContext is CommanderPane {
+            return session.items.allSatisfy { $0.localObject is FileEntry }
+        }
+        return session.items.allSatisfy { FileDropTransfer.canLoad($0.itemProvider) }
+    }
+
+    private func targetForDrop(in tableView: UITableView, session: UIDropSession) -> FileEntry? {
+        // Use the actual row under the pointer, not UIKit's insertion index.
+        if let index = tableView.indexPathForRow(at: session.location(in: tableView)), index.section == 0 {
+            if tableView === treeList, flatTree.indices.contains(index.row) { return flatTree[index.row].entry }
+            if tableView === fileList, visibleEntries.indices.contains(index.row) {
+                let entry = visibleEntries[index.row]
+                if entry.isDirectoryLike() { return entry }
+            }
+        }
+        return currentDirectory
     }
     
     func tableView(_ tableView: UITableView, dropSessionDidUpdate session: UIDropSession, withDestinationIndexPath destinationIndexPath: IndexPath?) -> UITableViewDropProposal {
-        return UITableViewDropProposal(operation: viewController!.moveMode ? .move : .copy, intent: .insertIntoDestinationIndexPath)
+        guard self.tableView(tableView, canHandle: session),
+              let target = targetForDrop(in: tableView, session: session), target.canWriteDirectory() else {
+            return UITableViewDropProposal(operation: .forbidden)
+        }
+        let internalDrag = session.localDragSession?.localContext is CommanderPane
+        let operation: UIDropOperation = internalDrag && session.allowsMoveOperation && viewController?.moveMode == true ? .move : .copy
+        return UITableViewDropProposal(operation: operation, intent: .insertIntoDestinationIndexPath)
     }
     
     func tableView(_ tableView: UITableView, performDropWith coordinator: UITableViewDropCoordinator) {
-        guard let sourcePane = coordinator.session.localDragSession?.localContext as? CommanderPane
-                ?? viewController?.activeDragPane else { return }
-        
-        var targetDirectory = currentDirectory
-        // UIKit may supply an insertion index after the last row. Empty-space
-        // drops target the current directory rather than a nonexistent entry.
-        if let indexPath = coordinator.destinationIndexPath, indexPath.section == 0 {
-            if tableView === treeList, flatTree.indices.contains(indexPath.row) {
-                targetDirectory = flatTree[indexPath.row].entry
-            } else if tableView === fileList, visibleEntries.indices.contains(indexPath.row) {
-                let destEntry = visibleEntries[indexPath.row]
-                if destEntry.isDirectoryLike() && !destEntry.isUpButton {
-                    targetDirectory = destEntry
-                }
-            }
+        guard self.tableView(tableView, canHandle: coordinator.session),
+              let target = targetForDrop(in: tableView, session: coordinator.session), target.canWriteDirectory(),
+              let controller = viewController else { return }
+        controller.activePane = self
+        if let sourcePane = coordinator.session.localDragSession?.localContext as? CommanderPane {
+            // Use the actual drag payload, never a selection that may have changed.
+            let sources = coordinator.items.compactMap { $0.dragItem.localObject as? FileEntry }
+            controller.runFileOperation(sources: sources, sourcePane: sourcePane, targetDirectory: target,
+                                        move: coordinator.proposal.operation == .move)
+        } else {
+            controller.receiveExternalDrop(providers: coordinator.items.map { $0.dragItem.itemProvider }, targetDirectory: target)
         }
-        
-        if targetDirectory == nil { return }
-        
-        viewController?.runFileOperation(sourcePane: sourcePane, targetDirectory: targetDirectory!)
     }
+
+    func tableView(_ tableView: UITableView, dragSessionIsRestrictedToDraggingApplication session: UIDragSession) -> Bool { false }
+
+    func tableView(_ tableView: UITableView, dragSessionAllowsMoveOperation session: UIDragSession) -> Bool { true }
 
     func tableView(_ tableView: UITableView, dragSessionDidEnd session: UIDragSession) {
         if viewController?.activeDragPane === self {
             viewController?.activeDragPane = nil
         }
+        // Finder may have moved a directly exported URL; refresh, but never
+        // delete source files merely because a drag session ended.
+        viewController?.refreshAllPanes(clearSelectionIn: [])
     }
 }
 

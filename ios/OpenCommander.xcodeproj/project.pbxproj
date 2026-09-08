@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DAD000000000000000000001 /* FileDropTransfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAD000000000000000000002 /* FileDropTransfer.swift */; };
 		C0DE00000000000000000001 /* NTFS3GVolume.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000011 /* NTFS3GVolume.swift */; };
 		C0DE00000000000000000002 /* NTFS3GBridge.c in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000012 /* NTFS3GBridge.c */; };
 		00DB8BB24627133102081997 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C0673250B7AD71D850FB70ED /* PrivacyInfo.xcprivacy */; };
@@ -73,6 +74,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		DAD000000000000000000002 /* FileDropTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDropTransfer.swift; sourceTree = "<group>"; };
 		C0DE00000000000000000011 /* NTFS3GVolume.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NTFS3GVolume.swift; sourceTree = "<group>"; };
 		C0DE00000000000000000012 /* NTFS3GBridge.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = NTFS3GBridge.c; sourceTree = "<group>"; };
 		C0DE00000000000000000013 /* NTFS3GBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NTFS3GBridge.h; sourceTree = "<group>"; };
@@ -147,6 +149,7 @@
 				4446BB5DED9CF5F765ACB678 /* AppDelegate.swift */,
 				4CADCE370033D94E97C19D6C /* Assets.xcassets */,
 				556918D3DC87DF614F200378 /* FileEntry.swift */,
+				DAD000000000000000000002 /* FileDropTransfer.swift */,
 				177BF22CC72C73144BF8A901 /* Localization-ar.json */,
 				E5C5B68809E3A9A3AA0D48DC /* Localization-hi.json */,
 				6816D7D810D1AC773BCDAF80 /* Localization-id.json */,
@@ -398,6 +401,7 @@
 			files = (
 				D78142BF3E7FB6427ADC9A63 /* AppDelegate.swift in Sources */,
 				510EFA53657E909B5C734B36 /* FileEntry.swift in Sources */,
+				DAD000000000000000000001 /* FileDropTransfer.swift in Sources */,
 				4A64E77E26EC97CD38490ED8 /* Localization.swift in Sources */,
 				8BC681367A8954F0784955B7 /* MacFileSystem.swift in Sources */,
 				97349B0FB0B561EFF33A37DC /* Pane.swift in Sources */,

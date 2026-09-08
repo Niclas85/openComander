@@ -30,6 +30,10 @@ class L10n {
 
     static let strings: [String: [String: String]] = [
         "en": [
+            "drop_loading": "Loading files from the other application…",
+            "drop_busy": "Finish the current operation or dialog before dropping more files.",
+            "drop_original_unavailable": "The source application supplied a temporary copy, not an original that can be moved. Choose Copy and drop again. Nothing was moved or deleted.",
+            "help_external_drop": "Drag files and folders from Finder, Desktop or another application into either file list or onto a folder in the list/tree. Empty space targets the current folder. Choose Copy or Move in the toolbar before dropping. Move requires access to the original; temporary files supplied by other apps can only be copied. You can also drag physical files/folders out to Finder or compatible apps. ZIP contents and read-only folders are not writable drop targets. macOS Option/Command modifier behavior and spring-loaded folders are not yet supported; external drop cursors indicate import/copy even when explicit Move is selected.",
             "app_name": "OpenCommander",
             "ok": "OK",
             "ready": "Ready",
@@ -812,6 +816,10 @@ class L10n {
             "zip_label": "ZIP (%d)",
         ],
         "de": [
+            "drop_loading": "Dateien aus der anderen Anwendung werden geladen…",
+            "drop_busy": "Bitte zuerst den aktuellen Vorgang oder Dialog abschließen.",
+            "drop_original_unavailable": "Die Quellanwendung hat eine temporäre Kopie geliefert, kein verschiebbares Original. Bitte Kopieren wählen und erneut ablegen. Es wurde nichts verschoben oder gelöscht.",
+            "help_external_drop": "Dateien und Ordner aus Finder, Desktop oder anderen Apps in eine Dateiliste oder auf einen Ordner in Liste/Baum ziehen. Leere Flächen verwenden den aktuellen Ordner. Vorher Kopieren oder Verschieben in der Werkzeugleiste wählen. Verschieben erfordert Zugriff auf das Original; temporäre Dateien anderer Apps können nur kopiert werden. Physische Dateien/Ordner lassen sich auch zu Finder oder kompatiblen Apps herausziehen. ZIP-Inhalte und schreibgeschützte Ordner sind keine beschreibbaren Ablageziele. Finder-Verhalten mit Option/Command und automatisch aufspringende Ordner sind noch nicht unterstützt; der externe Ziehzeiger zeigt Import/Kopieren auch bei ausdrücklich gewähltem Verschieben.",
             "app_name": "OpenCommander",
             "ready": "Bereit",
             "legal_short": "AGB",
