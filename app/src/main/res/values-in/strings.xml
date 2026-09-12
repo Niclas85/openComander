@@ -125,4 +125,7 @@
     <string name="zip_failed">ZIP gagal: %1$s</string>
     <string name="zip_detail">Arsip ZIP</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">Urungkan dihentikan: berkas berubah atau tidak dapat diverifikasi. Tidak ada berkas lain yang akan dihapus.</string>
+    <string name="move_cleanup_failed">Sumber tidak dapat dihapus seluruhnya. Salinan lengkap disimpan di: %1$s</string>
+    <string name="recovery_retained">Berkas pemulihan disimpan di: %1$s</string>
 </resources>

@@ -125,4 +125,7 @@
     <string name="zip_failed">ZIP misslyckades: %1$s</string>
     <string name="zip_detail">ZIP-arkiv</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">Ångra stoppades: filer har ändrats eller kan inte verifieras. Inga fler filer tas bort.</string>
+    <string name="move_cleanup_failed">Källan kunde inte tas bort helt. Den fullständiga kopian finns kvar på: %1$s</string>
+    <string name="recovery_retained">Återställningsfiler finns kvar på: %1$s</string>
 </resources>

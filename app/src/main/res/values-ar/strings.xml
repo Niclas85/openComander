@@ -125,4 +125,7 @@
     <string name="zip_failed">فشل إنشاء ZIP: %1$s</string>
     <string name="zip_detail">أرشيف ZIP</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">توقف التراجع: تغيرت الملفات أو تعذر التحقق منها. لن تُحذف ملفات أخرى.</string>
+    <string name="move_cleanup_failed">تعذر حذف المصدر بالكامل. تم الاحتفاظ بالنسخة الكاملة في: %1$s</string>
+    <string name="recovery_retained">تم الاحتفاظ بملفات الاسترداد في: %1$s</string>
 </resources>

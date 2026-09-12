@@ -10,11 +10,11 @@ import MediaPlayer
 
 
 enum OperationType {
-    case delete(files: [(originalUrl: URL, backupUrl: URL)])
-    case move(files: [(source: URL, destination: URL, replacedBackup: URL?)])
-    case copy(files: [(source: URL, destination: URL, replacedBackup: URL?)])
-    case zip(url: URL)
-    case rename(originalUrl: URL, newUrl: URL)
+    case delete(files: [FileUndoRecord])
+    case move(files: [FileUndoRecord])
+    case copy(files: [FileUndoRecord])
+    case zip(record: FileUndoRecord)
+    case rename(record: FileUndoRecord)
 }
 
 private final class ImageViewerViewController: UIViewController {
@@ -1200,7 +1200,7 @@ extension ViewController {
         case .move(let files): return String(format: L10n.get("move_label"), files.count)
         case .copy(let files): return String(format: L10n.get("copy_label"), files.count)
         case .zip: return String(format: L10n.get("zip_label"), 1)
-        case .rename(_, let newURL): return String(format: L10n.get("renamed_item"), newURL.lastPathComponent)
+        case .rename(let record): return String(format: L10n.get("renamed_item"), record.destination.lastPathComponent)
         }
     }
     
@@ -1238,7 +1238,7 @@ extension ViewController {
             let fm = FileManager.default
             let backupRoot = fm.temporaryDirectory.appendingPathComponent("OpenCommanderUndo-\(UUID().uuidString)", isDirectory: true)
             try? fm.createDirectory(at: backupRoot, withIntermediateDirectories: true)
-            var records: [(originalUrl: URL, backupUrl: URL)] = []
+            var records: [FileUndoRecord] = []
             var failure: Error?
             for (index, source) in sources.enumerated() {
                 let url = source.url
@@ -1254,7 +1254,7 @@ extension ViewController {
                                 userInfo: [NSLocalizedDescriptionKey: String(format: L10n.get("cannot_move_to_trash"), url.lastPathComponent)]
                             )
                         }
-                        records.append((url, trashedURL))
+                        records.append(FileUndoRecord(source: url, destination: trashedURL, replacedBackup: nil))
 #else
                         let parent = url.deletingLastPathComponent()
                         let trashDirectory = parent.appendingPathComponent(".OpenCommanderTrash", isDirectory: true)
@@ -1269,12 +1269,12 @@ extension ViewController {
                         try fm.createDirectory(at: trashDirectory, withIntermediateDirectories: true)
                         let trashedURL = self.uniqueURL(in: trashDirectory, name: url.lastPathComponent)
                         try fm.moveItem(at: url, to: trashedURL)
-                        records.append((url, trashedURL))
+                        records.append(FileUndoRecord(source: url, destination: trashedURL, replacedBackup: nil))
 #endif
                     } else {
                         let backup = self.uniqueURL(in: backupRoot, name: url.lastPathComponent)
                         try fm.moveItem(at: url, to: backup)
-                        records.append((url, backup))
+                        records.append(FileUndoRecord(source: url, destination: backup, replacedBackup: nil))
                     }
                 } catch {
                     failure = error
@@ -1339,8 +1339,9 @@ extension ViewController {
             let fm = FileManager.default
             do {
                 try fm.moveItem(at: url, to: newUrl)
+                let record = FileUndoRecord(source: url, destination: newUrl, replacedBackup: nil)
                 DispatchQueue.main.async {
-                    self.operationHistory.append(.rename(originalUrl: url, newUrl: newUrl))
+                    self.operationHistory.append(.rename(record: record))
                     self.refreshAllPanes(clearSelectionIn: panes)
                     self.finishProgress(String(format: L10n.get("renamed_item"), newName))
                 }
@@ -1456,10 +1457,8 @@ extension ViewController {
         DispatchQueue.global(qos: .userInitiated).async {
             let fm = FileManager.default
             let targetURL = targetDirectory.url
-            let backupRoot = fm.temporaryDirectory.appendingPathComponent("OpenCommanderUndo-\(UUID().uuidString)", isDirectory: true)
-            try? fm.createDirectory(at: backupRoot, withIntermediateDirectories: true)
-            var movedFiles: [(source: URL, destination: URL, replacedBackup: URL?)] = []
-            var copiedFiles: [(source: URL, destination: URL, replacedBackup: URL?)] = []
+            var movedFiles: [FileUndoRecord] = []
+            var copiedFiles: [FileUndoRecord] = []
             var failure: Error?
 
             for (index, source) in sources.enumerated() {
@@ -1475,26 +1474,36 @@ extension ViewController {
                 var destination = preferred
                 var replacedBackup: URL?
                 do {
-                    if fm.fileExists(atPath: preferred.path) {
-                        if replace {
-                            let backup = self.uniqueURL(in: backupRoot, name: preferred.lastPathComponent)
+                    if SafeFileOperations.exists(preferred) {
+                        if replace && move {
+                            let backupRoot = targetURL.appendingPathComponent(".OpenCommanderUndo-\(UUID().uuidString)", isDirectory: true)
+                            try fm.createDirectory(at: backupRoot, withIntermediateDirectories: false)
+                            let backup = backupRoot.appendingPathComponent(preferred.lastPathComponent)
                             try fm.moveItem(at: preferred, to: backup)
                             replacedBackup = backup
-                        } else {
+                        } else if !replace {
                             destination = self.uniqueURL(in: targetURL, name: preferred.lastPathComponent)
                         }
                     }
                     if move {
                         try fm.moveItem(at: sourceURL, to: destination)
-                        movedFiles.append((sourceURL, destination, replacedBackup))
+                        movedFiles.append(FileUndoRecord(source: sourceURL, destination: destination, replacedBackup: replacedBackup))
                     } else {
-                        try fm.copyItem(at: sourceURL, to: destination)
-                        copiedFiles.append((sourceURL, destination, replacedBackup))
+                        replacedBackup = try SafeFileOperations.copyReplacing(
+                            source: sourceURL, destination: destination, replace: replace)
+                        copiedFiles.append(FileUndoRecord(source: sourceURL, destination: destination, replacedBackup: replacedBackup))
                     }
                 } catch {
                     failure = error
-                    if let replacedBackup, !fm.fileExists(atPath: preferred.path) {
-                        try? fm.moveItem(at: replacedBackup, to: preferred)
+                    if let replacedBackup {
+                        do {
+                            guard !SafeFileOperations.exists(preferred) else { throw SafeFileOperations.conflict(preferred) }
+                            try fm.moveItem(at: replacedBackup, to: preferred)
+                        } catch {
+                            failure = NSError(domain: "OpenCommander.FileSafety", code: 2,
+                                              userInfo: [NSLocalizedDescriptionKey:
+                                                L10n.get("recovery_retained", replacedBackup.path) + "\n" + error.localizedDescription])
+                        }
                     }
                     break
                 }
@@ -1629,8 +1638,9 @@ extension ViewController {
                     archiveURL = try publish(in: documents)
                     usedDocuments = true
                 }
+                let record = FileUndoRecord(source: archiveURL, destination: archiveURL, replacedBackup: nil)
                 DispatchQueue.main.async {
-                    self.operationHistory.append(.zip(url: archiveURL))
+                    self.operationHistory.append(.zip(record: record))
                     if usedDocuments { pane?.openDirectory(FileEntry(url: documents, parent: nil)) }
                     self.refreshAllPanes(clearSelectionIn: panes)
                     let location = usedDocuments ? "/Documents/" + archiveURL.lastPathComponent : archiveURL.lastPathComponent
@@ -1657,27 +1667,16 @@ extension ViewController {
         let lastOp = operationHistory[index]
         showProgress(String(format: L10n.get("undo_progress"), operationLabel(lastOp)), progress: 0)
         DispatchQueue.global(qos: .userInitiated).async {
-            let fm = FileManager.default
             do {
                 switch lastOp {
                 case .delete(let files):
-                    for file in files {
-                        try fm.moveItem(at: file.backupUrl, to: file.originalUrl)
-                    }
+                    for file in files.reversed() { try file.undo(move: true) }
                 case .move(let files):
-                    for file in files.reversed() {
-                        try fm.moveItem(at: file.destination, to: file.source)
-                        if let backup = file.replacedBackup { try fm.moveItem(at: backup, to: file.destination) }
-                    }
+                    for file in files.reversed() { try file.undo(move: true) }
                 case .copy(let files):
-                    for file in files.reversed() {
-                        try fm.removeItem(at: file.destination)
-                        if let backup = file.replacedBackup { try fm.moveItem(at: backup, to: file.destination) }
-                    }
-                case .zip(let url):
-                    try fm.removeItem(at: url)
-                case .rename(let originalUrl, let newUrl):
-                    try fm.moveItem(at: newUrl, to: originalUrl)
+                    for file in files.reversed() { try file.undo(move: false) }
+                case .zip(let record): try record.undo(move: false)
+                case .rename(let record): try record.undo(move: true)
                 }
                 
                 DispatchQueue.main.async {
@@ -1687,6 +1686,13 @@ extension ViewController {
                 }
             } catch {
                 DispatchQueue.main.async {
+                    switch lastOp {
+                    case .delete(let files): self.operationHistory[index] = .delete(files: files.filter { !$0.completed })
+                    case .move(let files): self.operationHistory[index] = .move(files: files.filter { !$0.completed })
+                    case .copy(let files): self.operationHistory[index] = .copy(files: files.filter { !$0.completed })
+                    default: break
+                    }
+                    self.refreshAllPanes(clearSelectionIn: [])
                     self.finishProgress(String(format: L10n.get("undo_failed"), error.localizedDescription))
                 }
             }
@@ -1872,8 +1878,8 @@ extension ViewController {
                 case .delete(let files): title = String(format: L10n.get("deleted_items"), files.count)
                 case .move(let files): title = String(format: L10n.get("moved_items"), files.count)
                 case .copy(let files): title = String(format: L10n.get("copied_items"), files.count)
-                case .zip(let url): title = String(format: L10n.get("zip_created"), url.lastPathComponent)
-                case .rename(_, let newUrl): title = String(format: L10n.get("renamed_item"), newUrl.lastPathComponent)
+                case .zip(let record): title = String(format: L10n.get("zip_created"), record.destination.lastPathComponent)
+                case .rename(let record): title = String(format: L10n.get("renamed_item"), record.destination.lastPathComponent)
                 }
                 let item = miniButton(label: title)
                 item.accessibilityIdentifier = "HistoryEntry-\(index)"
@@ -2355,8 +2361,8 @@ extension ViewController: UIDocumentPickerDelegate {
         showProgress(String(format: L10n.get(move ? "moving_items" : "copying_items"), urls.count), progress: 0)
         DispatchQueue.global(qos: .userInitiated).async {
             let fm = FileManager.default
-            var moved: [(source: URL, destination: URL, replacedBackup: URL?)] = []
-            var copied: [(source: URL, destination: URL, replacedBackup: URL?)] = []
+            var moved: [FileUndoRecord] = []
+            var copied: [FileUndoRecord] = []
             var failure: Error?
 
             for (index, source) in urls.enumerated() {
@@ -2376,10 +2382,10 @@ extension ViewController: UIDocumentPickerDelegate {
                 do {
                     if move {
                         try fm.moveItem(at: source, to: destination)
-                        moved.append((source, destination, nil))
+                        moved.append(FileUndoRecord(source: source, destination: destination, replacedBackup: nil))
                     } else {
                         try fm.copyItem(at: source, to: destination)
-                        copied.append((source, destination, nil))
+                        copied.append(FileUndoRecord(source: source, destination: destination, replacedBackup: nil))
                     }
                 } catch {
                     failure = error
@@ -2470,13 +2476,13 @@ extension ViewController: UIDocumentPickerDelegate {
         showProgress(String(format: L10n.get("duplicating_items"), sources.count), progress: 0)
         DispatchQueue.global(qos: .userInitiated).async {
             let fm = FileManager.default
-            var copied: [(source: URL, destination: URL, replacedBackup: URL?)] = []
+            var copied: [FileUndoRecord] = []
             var failure: Error?
             for (index, source) in sources.enumerated() {
                 let destination = self.uniqueURL(in: pane.currentDirectory.url, name: source.name())
                 do {
                     try fm.copyItem(at: source.url, to: destination)
-                    copied.append((source.url, destination, nil))
+                    copied.append(FileUndoRecord(source: source.url, destination: destination, replacedBackup: nil))
                 } catch {
                     failure = error
                     break

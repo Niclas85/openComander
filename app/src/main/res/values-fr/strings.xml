@@ -124,4 +124,7 @@
     <string name="zip_failed">Échec du ZIP : %1$s</string>
     <string name="zip_detail">Archive ZIP</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">Annulation arrêtée : les fichiers ont changé ou ne peuvent pas être vérifiés. Aucun autre fichier ne sera supprimé.</string>
+    <string name="move_cleanup_failed">La source n’a pas pu être entièrement supprimée. La copie complète est conservée ici : %1$s</string>
+    <string name="recovery_retained">Les fichiers de récupération sont conservés ici : %1$s</string>
 </resources>

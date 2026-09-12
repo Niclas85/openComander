@@ -30,6 +30,8 @@ class L10n {
 
     static let strings: [String: [String: String]] = [
         "en": [
+            "undo_changed": "Undo stopped: files have changed or cannot be verified. No further files will be removed.",
+            "recovery_retained": "Recovery files have been retained at: %@",
             "drop_loading": "Loading files from the other application…",
             "drop_busy": "Finish the current operation or dialog before dropping more files.",
             "drop_original_unavailable": "The source application supplied a temporary copy, not an original that can be moved. Choose Copy and drop again. Nothing was moved or deleted.",
@@ -262,6 +264,8 @@ class L10n {
             "zip_label": "ZIP (%d)",
         ],
         "it": [
+            "undo_changed": "Annullamento interrotto: i file sono cambiati o non possono essere verificati. Non verranno rimossi altri file.",
+            "recovery_retained": "I file di ripristino sono conservati in: %@",
             "app_name": "OpenCommander",
             "ready": "Pronto",
             "legal_short": "Legale",
@@ -417,6 +421,8 @@ class L10n {
             "zip_label": "ZIP (%d)",
         ],
         "fr": [
+            "undo_changed": "Annulation arrêtée : les fichiers ont changé ou ne peuvent pas être vérifiés. Aucun autre fichier ne sera supprimé.",
+            "recovery_retained": "Les fichiers de récupération sont conservés ici : %@",
             "app_name": "OpenCommander",
             "ready": "Prêt",
             "legal_short": "Legal",
@@ -572,6 +578,8 @@ class L10n {
             "zip_label": "ZIP (%d)",
         ],
         "es": [
+            "undo_changed": "Se detuvo la acción de deshacer: los archivos cambiaron o no se pueden verificar. No se eliminarán más archivos.",
+            "recovery_retained": "Los archivos de recuperación se conservan en: %@",
             "app_name": "OpenCommander",
             "ready": "Listo",
             "legal_short": "Legal",
@@ -727,6 +735,8 @@ class L10n {
             "zip_label": "ZIP (%d)",
         ],
         "nl": [
+            "undo_changed": "Ongedaan maken gestopt: bestanden zijn gewijzigd of kunnen niet worden gecontroleerd. Er worden geen verdere bestanden verwijderd.",
+            "recovery_retained": "Herstelbestanden blijven bewaard in: %@",
             "app_name": "OpenCommander",
             "ready": "Gereed",
             "legal_short": "Legal",
@@ -882,6 +892,8 @@ class L10n {
             "zip_label": "ZIP (%d)",
         ],
         "de": [
+            "undo_changed": "Rückgängig gestoppt: Dateien wurden verändert oder können nicht geprüft werden. Es werden keine weiteren Dateien entfernt.",
+            "recovery_retained": "Wiederherstellungsdateien bleiben erhalten unter: %@",
             "drop_loading": "Dateien aus der anderen Anwendung werden geladen…",
             "drop_busy": "Bitte zuerst den aktuellen Vorgang oder Dialog abschließen.",
             "drop_original_unavailable": "Die Quellanwendung hat eine temporäre Kopie geliefert, kein verschiebbares Original. Bitte Kopieren wählen und erneut ablegen. Es wurde nichts verschoben oder gelöscht.",
@@ -1113,6 +1125,8 @@ class L10n {
             "zip_label": "ZIP (%d)",
         ],
         "pt": [
+            "undo_changed": "Anulação interrompida: os arquivos mudaram ou não podem ser verificados. Nenhum outro arquivo será removido.",
+            "recovery_retained": "Os arquivos de recuperação foram preservados em: %@",
             "app_name": "OpenCommander",
             "ready": "Pronto",
             "legal_short": "Legal",

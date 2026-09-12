@@ -125,4 +125,7 @@
     <string name="zip_failed">ZIP 失败：%1$s</string>
     <string name="zip_detail">ZIP 压缩包</string>
     <string name="zip_label">ZIP（%1$d）</string>
+    <string name="undo_changed">已停止撤销：文件已更改或无法验证。不会继续删除文件。</string>
+    <string name="move_cleanup_failed">无法完全删除源文件。完整副本保留在：%1$s</string>
+    <string name="recovery_retained">恢复文件保留在：%1$s</string>
 </resources>

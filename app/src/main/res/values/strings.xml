@@ -125,4 +125,7 @@
     <string name="zip_failed">ZIP failed: %1$s</string>
     <string name="zip_detail">ZIP archive</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">Undo stopped: files have changed or cannot be verified. No further files will be removed.</string>
+    <string name="move_cleanup_failed">Source cleanup failed. The complete copy has been retained at: %1$s</string>
+    <string name="recovery_retained">Recovery files have been retained at: %1$s</string>
 </resources>

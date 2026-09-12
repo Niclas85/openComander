@@ -124,4 +124,7 @@
     <string name="zip_failed">ZIP mislukt: %1$s</string>
     <string name="zip_detail">ZIP-archief</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">Ongedaan maken gestopt: bestanden zijn gewijzigd of kunnen niet worden gecontroleerd. Er worden geen verdere bestanden verwijderd.</string>
+    <string name="move_cleanup_failed">De bron kon niet volledig worden verwijderd. De volledige kopie blijft bewaard in: %1$s</string>
+    <string name="recovery_retained">Herstelbestanden blijven bewaard in: %1$s</string>
 </resources>

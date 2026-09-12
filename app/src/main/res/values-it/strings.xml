@@ -124,4 +124,7 @@
     <string name="zip_failed">ZIP non riuscito: %1$s</string>
     <string name="zip_detail">Archivio ZIP</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">Annullamento interrotto: i file sono cambiati o non possono essere verificati. Non verranno rimossi altri file.</string>
+    <string name="move_cleanup_failed">Impossibile eliminare completamente l’origine. La copia completa è conservata in: %1$s</string>
+    <string name="recovery_retained">I file di ripristino sono conservati in: %1$s</string>
 </resources>

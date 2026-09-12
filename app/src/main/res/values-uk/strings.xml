@@ -125,4 +125,7 @@
     <string name="zip_failed">Не вдалося створити ZIP: %1$s</string>
     <string name="zip_detail">ZIP-архів</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">Скасування зупинено: файли змінено або їх неможливо перевірити. Інші файли не видалятимуться.</string>
+    <string name="move_cleanup_failed">Не вдалося повністю видалити джерело. Повну копію збережено тут: %1$s</string>
+    <string name="recovery_retained">Файли відновлення збережено тут: %1$s</string>
 </resources>

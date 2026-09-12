@@ -125,4 +125,7 @@
     <string name="zip_failed">ZIP ล้มเหลว: %1$s</string>
     <string name="zip_detail">ไฟล์เก็บถาวร ZIP</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">หยุดการเลิกทำ: ไฟล์เปลี่ยนแปลงหรือไม่สามารถตรวจสอบได้ จะไม่ลบไฟล์เพิ่มเติม</string>
+    <string name="move_cleanup_failed">ไม่สามารถลบต้นฉบับได้ทั้งหมด สำเนาฉบับสมบูรณ์ยังอยู่ที่: %1$s</string>
+    <string name="recovery_retained">เก็บไฟล์สำหรับกู้คืนไว้ที่: %1$s</string>
 </resources>

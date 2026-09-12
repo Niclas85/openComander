@@ -125,4 +125,7 @@
     <string name="zip_failed">Не удалось создать ZIP: %1$s</string>
     <string name="zip_detail">ZIP-архив</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">Отмена остановлена: файлы изменены или их невозможно проверить. Другие файлы удаляться не будут.</string>
+    <string name="move_cleanup_failed">Не удалось полностью удалить источник. Полная копия сохранена здесь: %1$s</string>
+    <string name="recovery_retained">Файлы для восстановления сохранены здесь: %1$s</string>
 </resources>
