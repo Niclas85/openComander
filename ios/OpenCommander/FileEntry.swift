@@ -88,9 +88,7 @@ class FileEntry: Hashable, Equatable {
 
     func isPhysicalDirectory() -> Bool {
         if zipPath != nil { return false }
-        var isDirectory: ObjCBool = false
-        FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
-        return isDirectory.boolValue
+        return HostFileSystem.isDirectory(url)
     }
 
     func isZipArchive() -> Bool {
@@ -103,6 +101,18 @@ class FileEntry: Hashable, Equatable {
 
     func isDirectoryLike() -> Bool {
         return isUpButton || isPhysicalDirectory() || isZipArchive() || (zipPath != nil && zipDirectory)
+    }
+
+    /// macOS packages and archives open with their assigned app. They remain
+    /// browsable explicitly in the tree/context menu, rather than on double-click.
+    func opensInPaneByDefault() -> Bool {
+#if targetEnvironment(macCatalyst)
+        if zipPath != nil { return zipDirectory }
+        return isPhysicalDirectory() &&
+            (try? url.resourceValues(forKeys: [.isPackageKey]).isPackage) != true
+#else
+        return isDirectoryLike()
+#endif
     }
 
     func canWriteDirectory() -> Bool {
@@ -163,23 +173,26 @@ class FileEntry: Hashable, Equatable {
     }
 
     func children(directoriesOnly: Bool) -> [FileEntry] {
+        // Compatibility for non-UI callers. The browser uses readChildren and
+        // presents failures instead of turning them into an empty directory.
+        do { return try readChildren(directoriesOnly: directoriesOnly) }
+        catch { return [] }
+    }
+
+    func readChildren(directoriesOnly: Bool) throws -> [FileEntry] {
         if isZipArchive() || isZipEntry() {
             return zipChildren(directoriesOnly: directoriesOnly)
         }
         
         var entries: [FileEntry] = []
-        do {
-            let options: FileManager.DirectoryEnumerationOptions = UserDefaults.standard.bool(forKey: "show_hidden_files") ? [] : .skipsHiddenFiles
-            let urls = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey], options: options)
-            for childUrl in urls {
-                let entry = FileEntry(url: childUrl, parent: self)
-                if directoriesOnly && !entry.isDirectoryLike() {
-                    continue
-                }
-                entries.append(entry)
+        let urls = try HostFileSystem.directoryContents(at: url,
+            showHidden: UserDefaults.standard.bool(forKey: "show_hidden_files"))
+        for childUrl in urls {
+            let entry = FileEntry(url: childUrl, parent: self)
+            if directoriesOnly && !entry.isDirectoryLike() {
+                continue
             }
-        } catch {
-            print("Error reading directory: \(error)")
+            entries.append(entry)
         }
         
         // Sort like Android: directories first, then alphabetically
@@ -211,17 +224,18 @@ class FileEntry: Hashable, Equatable {
         return total
     }
 
-    func materializedURLForOpening() throws -> URL {
-        guard let zipPath else { return url }
-        guard !zipDirectory, let archive = Archive(url: url, accessMode: .read),
+    func materializedURLForOpening(sourceURL: URL? = nil) throws -> URL {
+        let sourceURL = sourceURL ?? url
+        guard let zipPath else { return sourceURL }
+        guard !zipDirectory, let archive = Archive(url: sourceURL, accessMode: .read),
               let item = archive.first(where: { $0.path == zipPath }) else {
             throw NSError(domain: "OpenCommander", code: 2, userInfo: [NSLocalizedDescriptionKey: "ZIP entry is unavailable"])
         }
         let outputDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("OpenCommanderPreview", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
         let output = outputDirectory.appendingPathComponent(name())
-        try? FileManager.default.removeItem(at: output)
         try archive.extract(item, to: output)
         return output
     }

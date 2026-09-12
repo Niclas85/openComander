@@ -8,16 +8,28 @@ if (uploadKeystorePropertiesFile.exists()) {
     uploadKeystorePropertiesFile.withInputStream { uploadKeystoreProperties.load(it) }
 }
 
+def uploadKeystoreFile = rootProject.file(
+        uploadKeystoreProperties.getProperty("storeFile", "release/opencommander-upload-key.jks"))
+def uploadStorePassword = uploadKeystoreProperties.getProperty("storePassword")
+        ?: System.getenv("OPENCOMMANDER_KEYSTORE_PASSWORD")
+def uploadKeyAlias = uploadKeystoreProperties.getProperty("keyAlias", "opencommander")
+def uploadKeyPassword = uploadKeystoreProperties.getProperty("keyPassword")
+        ?: System.getenv("OPENCOMMANDER_KEY_PASSWORD")
+def hasUploadSigning = uploadKeystoreFile.exists()
+        && uploadStorePassword
+        && uploadKeyAlias
+        && uploadKeyPassword
+
 android {
     namespace "com.opencommander"
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.opencommander"
         minSdk 26
-        targetSdk 35
-        versionCode 1
-        versionName "1.0"
+        targetSdk 36
+        versionCode 7
+        versionName "1.3.1"
     }
 
     compileOptions {
@@ -27,18 +39,18 @@ android {
 
     signingConfigs {
         release {
-            if (uploadKeystorePropertiesFile.exists()) {
-                storeFile rootProject.file(uploadKeystoreProperties["storeFile"])
-                storePassword uploadKeystoreProperties["storePassword"]
-                keyAlias uploadKeystoreProperties["keyAlias"]
-                keyPassword uploadKeystoreProperties["keyPassword"]
+            if (hasUploadSigning) {
+                storeFile uploadKeystoreFile
+                storePassword uploadStorePassword
+                keyAlias uploadKeyAlias
+                keyPassword uploadKeyPassword
             }
         }
     }
 
     buildTypes {
         release {
-            if (uploadKeystorePropertiesFile.exists()) {
+            if (hasUploadSigning) {
                 signingConfig signingConfigs.release
             }
         }

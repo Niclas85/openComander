@@ -1,4 +1,5 @@
 import UIKit
+import ZIPFoundation
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -11,6 +12,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         if ProcessInfo.processInfo.arguments.contains("--app-review-fixtures") {
             prepareAppReviewFixtures()
+        }
+        if ProcessInfo.processInfo.arguments.contains("--image-viewer-fixtures") {
+            prepareImageViewerFixtures()
+        }
+        if ProcessInfo.processInfo.arguments.contains("--stale-folder-bookmark-fixture") {
+            prepareStaleFolderBookmarkFixture()
+        }
+        if ProcessInfo.processInfo.arguments.contains("--reset-media-import-fixtures") {
+            resetMediaImportFixtures()
         }
 #endif
         window = UIWindow(frame: UIScreen.main.bounds)
@@ -50,6 +60,60 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             .write(to: dragMe.appendingPathComponent("Proof.txt"), options: .atomic)
         try? fileManager.removeItem(at: dropHere.appendingPathComponent("DragMe"))
         try? fileManager.removeItem(at: documents.appendingPathComponent("Source.zip"))
+    }
+
+    private func prepareStaleFolderBookmarkFixture() {
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: "ios_file_access_onboarding_v2_shown")
+        defaults.set(true, forKey: "onboarding_shown")
+        defaults.set(Data("not-a-bookmark".utf8), forKey: "folder_bookmark_pane_1")
+        defaults.set(Data("not-a-bookmark".utf8), forKey: "folder_bookmark_pane_2")
+        defaults.set("/private/unavailable", forKey: "folder_path_pane_1")
+        defaults.set("/private/unavailable", forKey: "folder_path_pane_2")
+    }
+
+    private func resetMediaImportFixtures() {
+        guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        try? FileManager.default.removeItem(at: documents.appendingPathComponent("Media", isDirectory: true))
+    }
+
+    private func prepareImageViewerFixtures() {
+        let fileManager = FileManager.default
+        UserDefaults.standard.set("en", forKey: "language")
+        guard let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let folder = documents.appendingPathComponent("ImageViewerQA", isDirectory: true)
+        try? fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        func png(color: UIColor, text: String) -> Data? {
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 600))
+            return renderer.pngData { context in
+                color.setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 900, height: 600))
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.boldSystemFont(ofSize: 72),
+                    .foregroundColor: UIColor.white,
+                ]
+                let size = (text as NSString).size(withAttributes: attributes)
+                (text as NSString).draw(
+                    at: CGPoint(x: (900 - size.width) / 2, y: (600 - size.height) / 2),
+                    withAttributes: attributes
+                )
+            }
+        }
+
+        let first = folder.appendingPathComponent("01-first.png")
+        let second = folder.appendingPathComponent("02-second.png")
+        try? png(color: UIColor.systemBlue, text: "FIRST")?.write(to: first, options: .atomic)
+        try? png(color: UIColor.systemGreen, text: "SECOND")?.write(to: second, options: .atomic)
+        try? Data("not an image".utf8).write(
+            to: folder.appendingPathComponent("03-corrupt.png"), options: .atomic)
+
+        let zip = folder.appendingPathComponent("gallery.zip")
+        try? fileManager.removeItem(at: zip)
+        if let archive = Archive(url: zip, accessMode: .create) {
+            try? archive.addEntry(with: first.lastPathComponent, fileURL: first)
+            try? archive.addEntry(with: second.lastPathComponent, fileURL: second)
+        }
     }
 #endif
 

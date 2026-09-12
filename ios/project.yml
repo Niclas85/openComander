@@ -15,6 +15,10 @@ targets:
     deploymentTarget: "16.0"
     dependencies:
       - package: ZIPFoundation
+      - target: OpenCommanderMacBridge
+        embed: true
+        link: false
+        platformFilter: macOS
       - target: OpenCommanderNTFSModule
         embed: true
         link: false
@@ -32,6 +36,7 @@ targets:
         NSDocumentsFolderUsageDescription: OpenCommander needs access to manage files in Documents.
         NSDownloadsFolderUsageDescription: OpenCommander needs access to manage files in Downloads.
         NSRemovableVolumesUsageDescription: OpenCommander needs access to manage files on external drives.
+        NSAppleMusicUsageDescription: OpenCommander uses access to your media library only when you choose music to play inside the app.
         ITSAppUsesNonExemptEncryption: false
         UIFileSharingEnabled: true
         UILaunchScreen: {}
@@ -64,6 +69,21 @@ targets:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: Apple Distribution
           PROVISIONING_PROFILE_SPECIFIER: OpenCommander App Store
+  OpenCommanderMacBridge:
+    type: bundle
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: OpenCommanderMacBridge/DesktopBridge.swift
+      - path: OpenCommander/DesktopBridgeProtocol.swift
+    settings:
+      base:
+        INFOPLIST_FILE: OpenCommanderMacBridge/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.github.niklaus85.OpenCommander.MacBridge
+        DEVELOPMENT_TEAM: WB497999XX
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.0"
+        SKIP_INSTALL: "YES"
   OpenCommanderNTFSModule:
     type: extensionkit-extension
     platform: macOS

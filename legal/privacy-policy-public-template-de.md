@@ -1,24 +1,24 @@
-# Datenschutzerklaerung fuer OpenCommander
+# Datenschutzerklärung für OpenCommander
 
 Stand: 13. Juni 2026
 
 ## Verantwortlicher
 
-Name/Firma: [BITTE EINTRAGEN]
+Name/Firma: Niklaus Haenggi
 
-Anschrift: [BITTE EINTRAGEN]
+Anschrift: Emil Frey Strasse 56, 4142 Münchenstein, Schweiz
 
 E-Mail: info@opengames.vip
 
-Website: [BITTE EINTRAGEN]
+Website: https://github.com/Niclas85/openComander
 
 ## Zweck der App
 
-OpenCommander ist ein lokaler Zwei-Seiten-Dateimanager fuer Android. Die App dient dazu, Dateien und Ordner auf dem Geraet anzuzeigen, zu oeffnen, zu kopieren, zu verschieben, als ZIP zu verpacken, ZIP-Archive zu durchsuchen und ausgewaehlte Dateiaktionen rueckgaengig zu machen.
+OpenCommander ist ein lokaler Zwei-Fenster-Dateimanager für iPhone, iPad und Android. Die App dient dazu, Dateien und Ordner auf dem Gerät anzuzeigen, zu öffnen, zu kopieren, zu verschieben, als ZIP zu verpacken, ZIP-Archive zu durchsuchen und ausgewählte Dateiaktionen rückgängig zu machen.
 
 ## Keine serverseitige Datenerhebung durch die App
 
-OpenCommander arbeitet lokal auf dem Android-Geraet. Die App betreibt kein Benutzerkonto, keine Anmeldung, keine Werbung, kein Tracking, keine Analysefunktionen, keine Cloud-Synchronisation und keine eigenen Server fuer App-Daten.
+OpenCommander arbeitet lokal auf dem Gerät. Die App betreibt kein Benutzerkonto, keine Anmeldung, keine Werbung, kein Tracking, keine Analysefunktionen, keine Cloud-Synchronisation und keine eigenen Server für App-Daten.
 
 Dateien und Ordner werden nicht an den Anbieter uebertragen. Eine Uebertragung an Dritte findet nur statt, wenn der Nutzer Dateien selbst mit anderen Apps oeffnet, teilt, verschiebt oder anderweitig ausserhalb von OpenCommander verarbeitet.
 

@@ -1,0 +1,5 @@
+Erfüllt die aktuellen Android-16-Anforderungen von Google Play.
+APK-Dateien im Android-Paketinstaller öffnen.
+Android-TV- und Fernbedienungsunterstützung.
+Verbesserter Ordnerzugriff unter Android 10.
+Erweiterte Funktionen für Umbenennen, ZIP und Rückgängig.

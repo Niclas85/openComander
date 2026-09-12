@@ -1,0 +1,1 @@
+Open APK files in Android's package installer, Android TV and remote-control support, improved Android 10 folder access, plus expanded rename, ZIP and undo features.

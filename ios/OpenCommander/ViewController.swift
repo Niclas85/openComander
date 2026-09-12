@@ -1,6 +1,12 @@
 import UIKit
 import ZIPFoundation
 import UniformTypeIdentifiers
+import ImageIO
+import QuickLook
+#if !targetEnvironment(macCatalyst)
+import PhotosUI
+import MediaPlayer
+#endif
 
 
 enum OperationType {
@@ -9,6 +15,209 @@ enum OperationType {
     case copy(files: [(source: URL, destination: URL, replacedBackup: URL?)])
     case zip(url: URL)
     case rename(originalUrl: URL, newUrl: URL)
+}
+
+private final class ImageViewerViewController: UIViewController {
+    private let entries: [FileEntry]
+    private var index: Int
+    private var loadGeneration = 0
+    private let imageView = UIImageView()
+    private let titleLabel = UILabel()
+    private let pageLabel = UILabel()
+    private let errorLabel = UILabel()
+    private let loadingIndicator = UIActivityIndicatorView(style: .large)
+    private let retryButton = UIButton(type: .system)
+    private var readCoordinator: NSFileCoordinator?
+
+    init(entries: [FileEntry], initialIndex: Int) {
+        self.entries = entries
+        self.index = initialIndex
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+        view.accessibilityIdentifier = "ImageViewer"
+
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.contentMode = .scaleAspectFit
+        imageView.clipsToBounds = true
+        imageView.isUserInteractionEnabled = true
+        imageView.isAccessibilityElement = true
+        imageView.accessibilityIdentifier = "ImageViewerImage"
+        view.addSubview(imageView)
+
+        errorLabel.translatesAutoresizingMaskIntoConstraints = false
+        errorLabel.textColor = .white
+        errorLabel.font = .systemFont(ofSize: 16)
+        errorLabel.textAlignment = .center
+        errorLabel.numberOfLines = 0
+        errorLabel.isHidden = true
+        errorLabel.accessibilityIdentifier = "ImageViewerError"
+        view.addSubview(errorLabel)
+
+        loadingIndicator.translatesAutoresizingMaskIntoConstraints = false
+        loadingIndicator.color = .white
+        loadingIndicator.accessibilityLabel = L10n.get("image_loading")
+        loadingIndicator.accessibilityIdentifier = "ImageViewerLoading"
+        view.addSubview(loadingIndicator)
+        retryButton.translatesAutoresizingMaskIntoConstraints = false
+        retryButton.setTitle(L10n.get("directory_retry"), for: .normal)
+        retryButton.accessibilityIdentifier = "ImageViewerRetry"
+        retryButton.addTarget(self, action: #selector(retryImage), for: .touchUpInside)
+        retryButton.isHidden = true
+        view.addSubview(retryButton)
+
+        let header = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
+        header.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(header)
+
+        let closeButton = UIButton(type: .system)
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        closeButton.setTitle("×", for: .normal)
+        closeButton.setTitleColor(.white, for: .normal)
+        closeButton.titleLabel?.font = .systemFont(ofSize: 32, weight: .light)
+        closeButton.accessibilityIdentifier = "ImageViewerClose"
+        closeButton.accessibilityLabel = L10n.get("cancel")
+        closeButton.addTarget(self, action: #selector(closeViewer), for: .touchUpInside)
+        header.contentView.addSubview(closeButton)
+
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.textColor = .white
+        titleLabel.font = .systemFont(ofSize: 15, weight: .medium)
+        titleLabel.lineBreakMode = .byTruncatingMiddle
+        titleLabel.accessibilityIdentifier = "ImageViewerTitle"
+        header.contentView.addSubview(titleLabel)
+
+        pageLabel.translatesAutoresizingMaskIntoConstraints = false
+        pageLabel.textColor = .white
+        pageLabel.font = .monospacedDigitSystemFont(ofSize: 14, weight: .regular)
+        pageLabel.textAlignment = .center
+        pageLabel.accessibilityIdentifier = "ImageViewerPage"
+        header.contentView.addSubview(pageLabel)
+
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: view.topAnchor),
+            header.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            header.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            header.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 56),
+
+            closeButton.leadingAnchor.constraint(equalTo: header.contentView.leadingAnchor, constant: 4),
+            closeButton.bottomAnchor.constraint(equalTo: header.contentView.bottomAnchor),
+            closeButton.widthAnchor.constraint(equalToConstant: 56),
+            closeButton.heightAnchor.constraint(equalToConstant: 56),
+
+            titleLabel.leadingAnchor.constraint(equalTo: closeButton.trailingAnchor, constant: 4),
+            titleLabel.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            pageLabel.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 8),
+            pageLabel.trailingAnchor.constraint(equalTo: header.contentView.trailingAnchor, constant: -12),
+            pageLabel.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            pageLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 54),
+
+            imageView.topAnchor.constraint(equalTo: header.bottomAnchor),
+            imageView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+            imageView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+            imageView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            errorLabel.centerXAnchor.constraint(equalTo: imageView.centerXAnchor),
+            errorLabel.centerYAnchor.constraint(equalTo: imageView.centerYAnchor),
+            errorLabel.leadingAnchor.constraint(greaterThanOrEqualTo: imageView.leadingAnchor, constant: 24),
+            errorLabel.trailingAnchor.constraint(lessThanOrEqualTo: imageView.trailingAnchor, constant: -24),
+            loadingIndicator.centerXAnchor.constraint(equalTo: imageView.centerXAnchor),
+            loadingIndicator.centerYAnchor.constraint(equalTo: imageView.centerYAnchor, constant: -60),
+            retryButton.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 16),
+            retryButton.centerXAnchor.constraint(equalTo: imageView.centerXAnchor)
+        ])
+
+        let swipeLeft = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipe(_:)))
+        swipeLeft.direction = .left
+        imageView.addGestureRecognizer(swipeLeft)
+        let swipeRight = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipe(_:)))
+        swipeRight.direction = .right
+        imageView.addGestureRecognizer(swipeRight)
+
+        showCurrentImage()
+    }
+
+    @objc private func closeViewer() {
+        loadGeneration += 1
+        readCoordinator?.cancel()
+        dismiss(animated: true)
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        loadGeneration += 1
+        readCoordinator?.cancel()
+    }
+
+    @objc private func retryImage() { showCurrentImage() }
+
+    @objc private func handleSwipe(_ recognizer: UISwipeGestureRecognizer) {
+        let requested = index + (recognizer.direction == .left ? 1 : -1)
+        guard entries.indices.contains(requested) else { return }
+        index = requested
+        showCurrentImage()
+    }
+
+    private func showCurrentImage() {
+        let entry = entries[index]
+        titleLabel.text = entry.name()
+        pageLabel.text = "\(index + 1) / \(entries.count)"
+        imageView.accessibilityLabel = entry.name()
+        imageView.image = nil
+        errorLabel.isHidden = true
+        retryButton.isHidden = true
+        loadingIndicator.startAnimating()
+        readCoordinator?.cancel()
+        let coordinator = NSFileCoordinator()
+        readCoordinator = coordinator
+        loadGeneration += 1
+        let generation = loadGeneration
+        let scale = UIScreen.main.scale
+        let maximumPixelSize = max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * scale * 2
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result: Result<UIImage, Error> = autoreleasepool {
+                Result {
+                    let image = try ImagePreviewLoader.load(at: entry.url,
+                        maximumPixelSize: Int(maximumPixelSize), coordinator: coordinator) {
+                        try entry.materializedURLForOpening(sourceURL: $0)
+                    }
+                    return UIImage(cgImage: image)
+                }
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.loadGeneration == generation else { return }
+                self.loadingIndicator.stopAnimating()
+                self.readCoordinator = nil
+                self.errorLabel.isHidden = true
+                switch result {
+                case .success(let image): self.imageView.image = image
+                case .failure(let error):
+                    if error is ImagePreviewLoader.PreviewError {
+                        self.errorLabel.text = L10n.get("image_invalid")
+                    } else if (error as NSError).domain == "NSFileProviderErrorDomain" {
+                        self.errorLabel.text = String(format: L10n.get("image_provider_error"), (error as NSError).code)
+                    } else {
+                        self.errorLabel.text = String(format: L10n.get("image_read_error"), error.localizedDescription)
+                    }
+                    self.errorLabel.isHidden = false
+                    self.retryButton.isHidden = false
+                }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in
+            guard let self, self.loadGeneration == generation, self.readCoordinator != nil else { return }
+            self.errorLabel.text = L10n.get("image_waiting")
+            self.errorLabel.isHidden = false
+        }
+    }
 }
 
 
@@ -153,13 +362,18 @@ class ViewController: UIViewController {
     private(set) var fileOperationInProgress = false
     var historyExpanded = false
     var moveMode = false
-    private var operationInProgress = false
+    private(set) var operationInProgress = false
     private var fileClipboard: FileClipboard?
     private weak var folderPickerPane: CommanderPane?
     private var folderPickerAppliesToBothPanes = false
     private weak var storageLocationsStack: UIStackView?
     private var storageLocationsRefreshGeneration = 0
     private var securityScopedURLs: [URL] = []
+    private var failedRestoredPaneTitles = Set<String>()
+#if !targetEnvironment(macCatalyst)
+    private weak var mediaImportPane: CommanderPane?
+    private var mediaImportInProgress = false
+#endif
     private var fullDiskAccessStatus: HostFileSystem.FullDiskAccessStatus = .unavailable
 
     var undoButton: UIButton!
@@ -171,6 +385,9 @@ class ViewController: UIViewController {
     var openFolderButton: UIButton!
     var darkModeSwitch: UISwitch!
     var documentInteractionController: UIDocumentInteractionController?
+    private var documentPreviewURL: URL?
+    private var documentPreparationPending = false
+    private var documentPreparationGeneration = 0
 
     var historyPanel: UIView!
     var progressText: UILabel!
@@ -209,7 +426,15 @@ class ViewController: UIViewController {
         activePane = leftPane
         
         buildLayout()
-        maybeShowFirstRunHelp()
+        if failedRestoredPaneTitles.isEmpty {
+            maybeShowFirstRunHelp()
+        } else {
+            showRestoredFolderAccessRecovery()
+        }
+    }
+
+    deinit {
+        securityScopedURLs.forEach { $0.stopAccessingSecurityScopedResource() }
     }
 
     @objc private func applicationDidBecomeActiveForAccessCheck() {
@@ -217,6 +442,13 @@ class ViewController: UIViewController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             self.refreshFullDiskAccessStatus(showFeedback: false)
             self.reloadStorageLocationsBar()
+            if !self.operationInProgress {
+                for pane in [self.leftPane, self.rightPane].compactMap({ $0 }) where
+                    HostFileSystem.isCloudStorage(pane.currentDirectory.url) {
+                    pane.reloadTreeKeepingExpansion()
+                    pane.refreshFiles()
+                }
+            }
         }
 #endif
     }
@@ -658,7 +890,8 @@ private extension ViewController {
             case .networkShare: category = L10n.get("network_share")
             case .cloudStorage: category = L10n.get("cloud_storage")
             }
-            locations.append((location.name, location.url, category))
+            let name = location.isLocalArchive ? "\(location.name) — \(L10n.get("cloud_local_archive"))" : location.name
+            locations.append((name, location.url, category))
         }
 
         var addedPaths = Set<String>()
@@ -706,6 +939,14 @@ import ZIPFoundation
 extension ViewController {
 
     func openExternal(_ entry: FileEntry) {
+#if targetEnvironment(macCatalyst)
+        openDesktopFile(entry)
+#else
+        if entry.mimeType().hasPrefix("image/") {
+            let folderEntries = activePane?.visibleEntries ?? [entry]
+            openImageViewer(entry, folderEntries: folderEntries)
+            return
+        }
         do {
             let url = try entry.materializedURLForOpening()
             let controller = UIDocumentInteractionController(url: url)
@@ -718,6 +959,115 @@ extension ViewController {
         } catch {
             updateGlobalStatus(L10n.get("cannot_open_file"))
         }
+#endif
+    }
+
+#if targetEnvironment(macCatalyst)
+    func openDesktopFile(_ entry: FileEntry, chooseApplication: Bool = false) {
+        guard let bridge = DesktopBridge.shared else {
+            updateGlobalStatus(L10n.get("desktop_bridge_unavailable"))
+            return
+        }
+        // Physical files stay at their original URL. The standard application
+        // and macOS handle their content/download, just as when Finder opens them.
+        prepareDocument(entry, coordinatePhysicalFile: false) { [weak self] url in
+            guard let self else { return }
+            let completion: (Bool, NSError?) -> Void = { [weak self] opened, error in
+                guard let self else { return }
+                if let error {
+                    let alert = UIAlertController(title: L10n.get("file_open_failed"),
+                        message: "\(entry.name())\n\(error.localizedDescription)", preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: L10n.get("open_with"), style: .default) { _ in
+                        self.openDesktopFile(entry, chooseApplication: true)
+                    })
+                    alert.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel))
+                    if self.presentedViewController == nil { self.present(alert, animated: true) }
+                    self.updateGlobalStatus(String(format: L10n.get("error_prefix"), error.localizedDescription))
+                } else if opened {
+                    self.updateGlobalStatus(String(format: L10n.get("file_handed_to_macos"), entry.name()))
+                }
+            }
+            if chooseApplication {
+                bridge.chooseApplication(for: url, title: L10n.get("open_with"), completion: completion)
+            } else {
+                bridge.openFile(url, application: nil, completion: completion)
+            }
+        }
+    }
+#endif
+
+    func previewFile(_ entry: FileEntry) {
+        prepareDocument(entry, coordinatePhysicalFile: true) { [weak self] url in
+            guard let self else { return }
+#if targetEnvironment(macCatalyst)
+            let canPreview = QLPreviewController.canPreviewItem(url as NSURL)
+#else
+            let canPreview = QLPreviewController.canPreview(url as NSURL)
+#endif
+            guard canPreview else {
+                self.updateGlobalStatus(L10n.get("preview_unavailable"))
+                return
+            }
+            self.documentPreviewURL = url
+            let preview = QLPreviewController()
+            preview.dataSource = self
+            self.present(preview, animated: true)
+        }
+    }
+
+    private func prepareDocument(_ entry: FileEntry, coordinatePhysicalFile: Bool,
+                                 completion: @escaping (URL) -> Void) {
+        guard !documentPreparationPending, presentedViewController == nil else { return }
+        documentPreparationPending = true
+        documentPreparationGeneration += 1
+        let generation = documentPreparationGeneration
+        let coordinator = NSFileCoordinator()
+        updateGlobalStatus(L10n.get("file_opening"))
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result: Result<URL, Error> = Result {
+                if entry.zipPath == nil && !coordinatePhysicalFile { return entry.url }
+                var accessError: NSError?
+                var prepared: Result<URL, Error>?
+                coordinator.coordinate(readingItemAt: entry.url, options: .withoutChanges,
+                    error: &accessError) { url in
+                    prepared = Result { try entry.materializedURLForOpening(sourceURL: url) }
+                }
+                if let accessError { throw accessError }
+                guard let prepared else { throw CocoaError(.fileReadUnknown) }
+                return try prepared.get()
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.documentPreparationGeneration == generation else { return }
+                self.documentPreparationPending = false
+                switch result {
+                case .success(let url): completion(url)
+                case .failure(let error):
+                    self.updateGlobalStatus(String(format: L10n.get("error_prefix"), error.localizedDescription))
+                }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
+            guard let self, self.documentPreparationPending,
+                  self.documentPreparationGeneration == generation else { return }
+            self.documentPreparationGeneration += 1
+            self.documentPreparationPending = false
+            coordinator.cancel()
+            self.updateGlobalStatus(L10n.get("file_open_slow"))
+        }
+    }
+
+    func openImageViewer(_ selected: FileEntry, folderEntries: [FileEntry]) {
+        var images = folderEntries.filter { !$0.isDirectoryLike() && $0.mimeType().hasPrefix("image/") }
+        var selectedIndex = images.firstIndex(where: { $0.key() == selected.key() })
+        if selectedIndex == nil {
+            images.append(selected)
+            selectedIndex = images.indices.last
+        }
+        guard let index = selectedIndex else { return }
+        let viewer = ImageViewerViewController(entries: images, initialIndex: index)
+        viewer.modalPresentationStyle = .fullScreen
+        viewer.modalTransitionStyle = .crossDissolve
+        present(viewer, animated: true)
     }
 
     func maybeShowFirstRunHelp() {
@@ -1396,6 +1746,8 @@ extension ViewController {
         sections.append(L10n.get("help_external_drop"))
 #if targetEnvironment(macCatalyst)
         sections.append(L10n.get("help_access_macos"))
+        sections.append(L10n.get("help_open_macos"))
+        sections.append(L10n.get("help_cloud_macos"))
         sections.append(macKeyboardShortcutsHelp())
 #else
         sections.append(L10n.get("help_access_ios"))
@@ -1541,6 +1893,16 @@ extension ViewController: UIDocumentInteractionControllerDelegate {
     }
 }
 
+extension ViewController: QLPreviewControllerDataSource {
+    func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
+        documentPreviewURL == nil ? 0 : 1
+    }
+
+    func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+        documentPreviewURL! as NSURL
+    }
+}
+
 // MARK: - Desktop file access and keyboard workflow
 
 extension ViewController: UIDocumentPickerDelegate {
@@ -1560,7 +1922,8 @@ extension ViewController: UIDocumentPickerDelegate {
             case .networkShare: prefix = L10n.get("network_share")
             case .cloudStorage: prefix = L10n.get("cloud_storage")
             }
-            locations.append(("\(prefix): \(location.name)", location.url))
+            let name = location.isLocalArchive ? "\(location.name) — \(L10n.get("cloud_local_archive"))" : location.name
+            locations.append(("\(prefix): \(name)", location.url))
         }
         var addedPaths = Set<String>()
         for (title, url) in locations where addedPaths.insert(url.standardizedFileURL.path).inserted {
@@ -1594,9 +1957,79 @@ extension ViewController: UIDocumentPickerDelegate {
         }
         present(alert, animated: true)
 #else
-        presentFolderPicker()
+        let alert = UIAlertController(
+            title: L10n.get("media_locations"),
+            message: L10n.get("media_access_note"),
+            preferredStyle: .actionSheet
+        )
+        alert.addAction(UIAlertAction(title: L10n.get("media_folder"), style: .default) { _ in
+            self.openLocalMediaFolder()
+        })
+        alert.addAction(UIAlertAction(title: L10n.get("import_photos_videos"), style: .default) { _ in
+            self.presentPhotoVideoPicker()
+        })
+        alert.addAction(UIAlertAction(title: L10n.get("music_library_read_only"), style: .default) { _ in
+            self.presentMusicPicker()
+        })
+        alert.addAction(UIAlertAction(title: L10n.get("local_documents"), style: .default) { _ in
+            let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            self.openLocation(documents, in: self.activePane ?? self.leftPane, persistPath: false)
+        })
+        alert.addAction(UIAlertAction(title: L10n.get("choose_another_folder"), style: .default) { _ in
+            self.presentFolderPicker()
+        })
+        alert.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel))
+        if let popover = alert.popoverPresentationController {
+            popover.sourceView = openFolderButton ?? view
+            popover.sourceRect = (openFolderButton ?? view).bounds
+        }
+        present(alert, animated: true)
 #endif
     }
+
+#if !targetEnvironment(macCatalyst)
+    private func localMediaFolderURL() throws -> URL {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let media = documents.appendingPathComponent("Media", isDirectory: true)
+        try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
+        return media
+    }
+
+    private func openLocalMediaFolder() {
+        do {
+            let media = try localMediaFolderURL()
+            openLocation(media, in: activePane ?? leftPane, persistPath: false)
+        } catch {
+            updateGlobalStatus(String(format: L10n.get("error_prefix"), error.localizedDescription))
+        }
+    }
+
+    private func presentPhotoVideoPicker() {
+        guard !mediaImportInProgress else {
+            updateGlobalStatus(L10n.get("drop_busy"))
+            return
+        }
+        mediaImportPane = activePane ?? leftPane
+        var configuration = PHPickerConfiguration(photoLibrary: .shared())
+        configuration.filter = .any(of: [.images, .videos])
+        configuration.selectionLimit = 0
+        configuration.selection = .ordered
+        configuration.preferredAssetRepresentationMode = .current
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = self
+        picker.modalPresentationStyle = .fullScreen
+        present(picker, animated: true)
+    }
+
+    private func presentMusicPicker() {
+        let picker = MPMediaPickerController(mediaTypes: .music)
+        picker.delegate = self
+        picker.allowsPickingMultipleItems = true
+        picker.showsCloudItems = true
+        picker.prompt = L10n.get("music_picker_prompt")
+        present(picker, animated: true)
+    }
+#endif
 
 #if targetEnvironment(macCatalyst)
     @objc private func showConnectToServerDialog() {
@@ -1702,8 +2135,17 @@ extension ViewController: UIDocumentPickerDelegate {
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         guard let url = urls.first, let pane = folderPickerPane ?? activePane else { return }
-        _ = url.startAccessingSecurityScopedResource()
-        securityScopedURLs.append(url)
+        let startedSecurityScope = url.startAccessingSecurityScopedResource()
+        do {
+            guard HostFileSystem.isDirectory(url) else { throw CocoaError(.fileReadNoSuchFile) }
+            _ = try HostFileSystem.directoryContents(at: url, showHidden: false)
+        } catch {
+            if startedSecurityScope { url.stopAccessingSecurityScopedResource() }
+            folderPickerAppliesToBothPanes = false
+            showFolderAccessFailure(error)
+            return
+        }
+        if startedSecurityScope { securityScopedURLs.append(url) }
         if folderPickerAppliesToBothPanes {
             folderPickerAppliesToBothPanes = false
             for targetPane in [leftPane, rightPane].compactMap({ $0 }) {
@@ -1721,8 +2163,7 @@ extension ViewController: UIDocumentPickerDelegate {
     }
 
     private func openLocation(_ url: URL, in pane: CommanderPane, persistPath: Bool = true) {
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+        guard HostFileSystem.isDirectory(url) else {
             updateGlobalStatus(L10n.get("path_not_found"))
             return
         }
@@ -1802,16 +2243,61 @@ extension ViewController: UIDocumentPickerDelegate {
         do {
             var stale = false
             let url = try URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
-            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-            _ = url.startAccessingSecurityScopedResource()
-            securityScopedURLs.append(url)
+            let startedSecurityScope = url.startAccessingSecurityScopedResource()
+            do {
+                guard HostFileSystem.isDirectory(url) else { throw CocoaError(.fileReadNoSuchFile) }
+                _ = try HostFileSystem.directoryContents(at: url, showHidden: false)
+            } catch {
+                if startedSecurityScope { url.stopAccessingSecurityScopedResource() }
+                throw error
+            }
+            if startedSecurityScope { securityScopedURLs.append(url) }
             if stale { saveFolderBookmark(url, forPane: title) }
             return url
         } catch {
-            UserDefaults.standard.removeObject(forKey: bookmarkKey(forPane: title))
+            clearStoredFolderLocation(forPane: title)
+            failedRestoredPaneTitles.insert(title)
             return nil
         }
 #endif
+    }
+
+    private func clearStoredFolderLocation(forPane title: String) {
+        UserDefaults.standard.removeObject(forKey: bookmarkKey(forPane: title))
+        UserDefaults.standard.removeObject(forKey: pathKey(forPane: title))
+    }
+
+    private func showRestoredFolderAccessRecovery() {
+        let failedTitles = failedRestoredPaneTitles
+        failedRestoredPaneTitles.removeAll()
+        if failedTitles.count == 1, let title = failedTitles.first {
+            activePane = title == rightPane.title ? rightPane : leftPane
+        }
+        let alert = UIAlertController(
+            title: L10n.get("storage_tree_failed"),
+            message: L10n.get("help_access_ios"),
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: L10n.get("choose_another_folder"), style: .default) { _ in
+            self.folderPickerAppliesToBothPanes = failedTitles.count > 1
+            self.presentFolderPicker()
+        })
+        alert.addAction(UIAlertAction(title: L10n.get("later"), style: .cancel))
+        DispatchQueue.main.async { self.present(alert, animated: true) }
+    }
+
+    private func showFolderAccessFailure(_ error: Error) {
+        updateGlobalStatus(L10n.get("storage_tree_failed"))
+        let alert = UIAlertController(
+            title: L10n.get("storage_tree_failed"),
+            message: error.localizedDescription + "\n\n" + L10n.get("help_access_ios"),
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: L10n.get("choose_another_folder"), style: .default) { _ in
+            self.presentFolderPicker()
+        })
+        alert.addAction(UIAlertAction(title: L10n.get("later"), style: .cancel))
+        present(alert, animated: true)
     }
 
     private func volumeStatus(for url: URL) -> String {
@@ -1947,7 +2433,7 @@ extension ViewController: UIDocumentPickerDelegate {
             updateGlobalStatus(L10n.get("no_file_selected"))
             return
         }
-        if entry.isDirectoryLike() {
+        if entry.opensInPaneByDefault() {
             pane.openDirectory(entry)
         } else {
             openExternal(entry)
@@ -1959,10 +2445,14 @@ extension ViewController: UIDocumentPickerDelegate {
             updateGlobalStatus(L10n.get("no_file_selected"))
             return
         }
-        if entry.isDirectoryLike() {
+        if entry.opensInPaneByDefault() {
             showFileInfo()
         } else {
+#if targetEnvironment(macCatalyst)
+            previewFile(entry)
+#else
             openExternal(entry)
+#endif
         }
     }
 
@@ -2121,3 +2611,109 @@ extension ViewController: UIDocumentPickerDelegate {
         present(alert, animated: true)
     }
 }
+
+#if !targetEnvironment(macCatalyst)
+extension ViewController: PHPickerViewControllerDelegate {
+    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        picker.dismiss(animated: true)
+        guard !results.isEmpty else { return }
+        guard !mediaImportInProgress else {
+            updateGlobalStatus(L10n.get("drop_busy"))
+            return
+        }
+        do {
+            let destination = try localMediaFolderURL()
+            mediaImportInProgress = true
+            showProgress(String(format: L10n.get("copying_items"), results.count), progress: 0)
+            importPickedMedia(results, index: 0, destination: destination, imported: 0, failures: [])
+        } catch {
+            updateGlobalStatus(String(format: L10n.get("error_prefix"), error.localizedDescription))
+        }
+    }
+
+    private func importPickedMedia(_ results: [PHPickerResult], index: Int, destination: URL,
+                                   imported: Int, failures: [String]) {
+        guard results.indices.contains(index) else {
+            mediaImportInProgress = false
+            if let pane = mediaImportPane ?? activePane {
+                openLocation(destination, in: pane, persistPath: false)
+            } else {
+                refreshAllPanes(clearSelectionIn: [])
+            }
+            if failures.isEmpty {
+                finishProgress(String(format: L10n.get("copied_items"), imported))
+            } else {
+                finishProgress(String(format: L10n.get("media_import_partial"), imported, failures.count))
+            }
+            return
+        }
+
+        let provider = results[index].itemProvider
+        let typeIdentifier = provider.registeredTypeIdentifiers.first { identifier in
+            guard let type = UTType(identifier) else { return false }
+            return type.conforms(to: .image) || type.conforms(to: .movie)
+        }
+        guard let typeIdentifier else {
+            var updatedFailures = failures
+            updatedFailures.append(provider.suggestedName ?? "media")
+            importPickedMedia(results, index: index + 1, destination: destination,
+                              imported: imported, failures: updatedFailures)
+            return
+        }
+
+        provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { [weak self] temporaryURL, error in
+            guard let self else { return }
+            var nextImported = imported
+            var nextFailures = failures
+            if let temporaryURL {
+                do {
+                    let type = UTType(typeIdentifier)
+                    var name = provider.suggestedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    if name.isEmpty { name = temporaryURL.lastPathComponent }
+                    if (name as NSString).pathExtension.isEmpty, let ext = type?.preferredFilenameExtension {
+                        name += ".\(ext)"
+                    }
+                    name = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+                    if name.isEmpty { name = "media-\(UUID().uuidString)" }
+                    let output = self.uniqueURL(in: destination, name: name)
+                    try FileManager.default.copyItem(at: temporaryURL, to: output)
+                    nextImported += 1
+                } catch {
+                    nextFailures.append(provider.suggestedName ?? error.localizedDescription)
+                }
+            } else {
+                nextFailures.append(provider.suggestedName ?? error?.localizedDescription ?? "media")
+            }
+            let progress = Int((Double(index + 1) / Double(results.count)) * 100)
+            DispatchQueue.main.async {
+                self.updateProgress(progress: progress)
+                self.importPickedMedia(results, index: index + 1, destination: destination,
+                                       imported: nextImported, failures: nextFailures)
+            }
+        }
+    }
+}
+
+extension ViewController: MPMediaPickerControllerDelegate {
+    func mediaPickerDidCancel(_ mediaPicker: MPMediaPickerController) {
+        mediaPicker.dismiss(animated: true)
+    }
+
+    func mediaPicker(_ mediaPicker: MPMediaPickerController, didPickMediaItems mediaItemCollection: MPMediaItemCollection) {
+        mediaPicker.dismiss(animated: true)
+        guard !mediaItemCollection.items.isEmpty else { return }
+        let player = MPMusicPlayerController.applicationMusicPlayer
+        player.setQueue(with: mediaItemCollection)
+        player.prepareToPlay { [weak self] error in
+            DispatchQueue.main.async {
+                if let error {
+                    self?.updateGlobalStatus(String(format: L10n.get("error_prefix"), error.localizedDescription))
+                } else {
+                    player.play()
+                    self?.updateGlobalStatus(String(format: L10n.get("music_playing"), mediaItemCollection.items.count))
+                }
+            }
+        }
+    }
+}
+#endif

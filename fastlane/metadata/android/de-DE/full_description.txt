@@ -13,12 +13,16 @@ Wichtige Funktionen:
 - Fortschritt mit Prozent, Elementen und Bytes
 - ZIP-Dateien wie Ordner durchsuchen
 - Markierte Dateien und Ordner als ZIP erstellen
+- Vorhandene APK-Dateien im Android-Paketinstaller öffnen
+- Für Android TV und Fernbedienungssteuerung verfügbar
 - Dateityp-Icons fuer Bilder, Videos, Musik, PDF, Office, Archive und mehr
 - Helles und dunkles Design
 - Mehrsprachige Oberflaeche
 - Keine Werbung, kein Tracking, kein Benutzerkonto
 
 OpenCommander arbeitet lokal auf deinem Geraet. Die App uebertraegt keine Dateien an eigene Server und nutzt keine Analyse-SDKs. Dateizugriff wird nur benoetigt, damit ein Dateimanager Dateien anzeigen, oeffnen, kopieren, verschieben und archivieren kann.
+
+APK-Installationen werden ausschliesslich durch einen bewussten Doppeltipp des Nutzers gestartet. OpenCommander lädt keine APK-Dateien herunter und installiert nichts automatisch. Android zeigt vor jeder Installation seine eigene Bestätigung an.
 
 Open Source:
 

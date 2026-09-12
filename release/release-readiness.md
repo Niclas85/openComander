@@ -1,37 +1,40 @@
 # OpenCommander Release Readiness
 
-Stand: 19. Juni 2026
+Stand: 9. August 2026
 
 ## Bereit
 
 - App-Code ist auf GitHub: https://github.com/Niclas85/openComander
 - Debug-Build wurde erfolgreich gebaut und auf einem angeschlossenen Android-Geraet installiert.
-- Release-AAB kann lokal gebaut werden.
+- Version 1.3 (Code 6) kann lokal als signiertes Release-AAB gebaut werden.
+- APK-Dateien werden nach einer ausdruecklichen Nutzeraktion an den Android-Paketinstaller uebergeben.
+- Android-TV-Unterstuetzung (Leanback-Launcher, D-Pad-Fokus, TV-Banner und TV-Screenshot) ist vorbereitet.
 - Google-Play-Listing liegt auf Deutsch und Englisch vor.
 - Fastlane-Metadaten liegen unter `fastlane/metadata/android/`.
 - F-Droid-Metadatenentwurf liegt unter `metadata/com.opencommander.yml`.
 - Play-Console-Antworten fuer Data Safety und All Files Access liegen unter `playstore/play-console-answers-de.md`.
 - Store-Assets liegen unter `playstore/`.
-- Lokaler Upload-Key wurde erstellt: `release/opencommander-upload-key.jks` (nicht ins Repo committen).
-- Lokale Signing-Konfiguration wurde erstellt: `keystore.properties` (nicht ins Repo committen).
+- Neuer lokaler Upload-Key wurde erstellt: `release/opencommander-upload-key.jks` (durch `.gitignore` geschuetzt).
+- Das Kennwort liegt im macOS-Schluesselbund unter `com.opencommander.upload-key.v2`.
 - Signiertes Release-AAB wurde gebaut: `app/build/outputs/bundle/release/app-release.aab`.
+- Signierte, direkt installierbare TV-APK wurde gebaut: `release/OpenCommander-1.3-tv-universal.apk`.
+- TV-Installationsanleitung und ADB-Helfer liegen unter `release/TV-INSTALLATION-DE.md` und `release/install-on-tv.sh`.
+- Signatur-Fingerabdruck (SHA-256): `0A:72:E5:84:25:C7:1C:C8:53:34:28:56:36:CF:D3:BE:D4:45:C0:62:F4:43:B3:3F:A7:78:CA:C5:92:08:D5:30`.
 
 ## Blocker Vor Play-Release
 
-- Upload-Key sicher extern sichern. Ohne diese Datei und Passwoerter koennen spaetere Updates nicht mit demselben Upload-Key signiert werden.
-- Google Play App Signing / Upload-Key in der Play Console final einrichten.
-- Play-Console-Zugang oder Service-Account fuer Upload bereitstellen.
-- Oeffentliche Datenschutz-URL veroeffentlichen.
-- Oeffentliche Impressum-/Anbieter-URL veroeffentlichen.
-- Echten Anbietername und ladungsfaehige Anschrift eintragen.
-- All-Files-Access-Erklaerung in der Play Console einreichen und Freigabe abwarten.
+- Google Play hat den neuen Uploadschluessel registriert, akzeptiert damit signierte AABs wegen der Sicherheitswartezeit aber erst ab 11. August 2026, 20:27:25 UTC (22:27:25 Uhr Europe/Zurich).
+- Upload-Key und Schluesselbund-Eintrag sicher extern sichern. Ohne beides sind spaetere Updates nicht mit demselben Upload-Key signierbar.
+- Die Erklaerungen fuer `MANAGE_EXTERNAL_STORAGE` und `REQUEST_INSTALL_PACKAGES` muessen beim Release korrekt eingereicht werden.
+- Android-TV-Store-Eintrag mit TV-Banner und TV-Screenshot abschliessen und zur TV-Pruefung einreichen.
+- Produktionszugriff ist in der Console beantragbar, aber noch nicht freigeschaltet; bis dahin bleibt der geschlossene Alpha-Test der aktive Track.
 
 ## Empfohlener Ablauf
 
-1. Release-Key/Upload-Key erstellen und sicher speichern.
-2. `app/build.gradle` um Release-Signing ergaenzen, ohne Passwoerter ins Repo zu committen.
-3. `.\gradlew.bat "-Dorg.gradle.vfs.watch=false" :app:bundleRelease --no-daemon --no-watch-fs --console=plain` ausfuehren.
-4. Signiertes AAB in Internal Testing hochladen.
+1. Genehmigung der Uploadschluessel-Zuruecksetzung abwarten.
+2. Key-Datei und macOS-Schluesselbund-Eintrag extern sichern.
+3. Kennwort aus dem Schluesselbund als `OPENCOMMANDER_KEYSTORE_PASSWORD` und `OPENCOMMANDER_KEY_PASSWORD` setzen und `./gradlew :app:bundleRelease` ausfuehren.
+4. Signiertes AAB in den geschlossenen Alpha-Test hochladen.
 5. Store-Listing aus `fastlane/metadata/android/` oder `playstore/` uebernehmen.
 6. Data-Safety und All-Files-Access aus `playstore/play-console-answers-de.md` eintragen.
 7. 10-20 Tester einladen und die Kernablaeufe testen:

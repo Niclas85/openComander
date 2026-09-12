@@ -32,6 +32,8 @@
 	<string>OpenCommander needs access to manage files in Downloads.</string>
 	<key>NSRemovableVolumesUsageDescription</key>
 	<string>OpenCommander needs access to manage files on external drives.</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>OpenCommander uses access to your media library only when you choose music to play inside the app.</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>UILaunchScreen</key>

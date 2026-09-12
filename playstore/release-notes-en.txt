@@ -1,8 +1,6 @@
-OpenCommander 1.0
+OpenCommander 1.3
 
-- Dual-pane file manager for Android
-- Copy and move with drag & drop
-- Browse ZIP files like folders
-- Create ZIP archives from selected files
-- Undo with history
-- No ads, no tracking, no account
+- Safely open APK files in Android’s package installer
+- Android TV and remote-control support
+- Improved Android 10 folder access
+- Expanded rename, ZIP and undo support

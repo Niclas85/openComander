@@ -1,6 +1,6 @@
 # Google Play Console Eingaben
 
-Stand: 13. Juni 2026
+Stand: 9. August 2026
 
 Diese Datei enthaelt die konkreten Eingaben fuer die Play Console fuer den aktuellen Build von OpenCommander. Sie gilt nur, solange die App keine Werbung, keine Analytics, kein Crash-Reporting, keine Cloud-Synchronisation, keine Benutzerkonten und keine externen Anbieter-Uploads enthaelt.
 
@@ -86,6 +86,23 @@ OpenCommander is a local dual-pane file manager. All files access is required fo
 ### Nutzererklaerung
 
 OpenCommander benoetigt Dateizugriff, damit du lokale Dateien und Ordner anzeigen, kopieren, verschieben, zippen und wiederherstellen kannst. Die App arbeitet lokal auf deinem Geraet und uebertraegt keine Dateien an eigene Server.
+
+### Request Install Packages
+
+- Berechtigung: `REQUEST_INSTALL_PACKAGES`
+- Kategorie: File management
+- Kernfunktion: Nutzerinitiierte Installation vorhandener lokaler APK-Dateien
+- Deklarationstext:
+
+OpenCommander is a local file manager. Users can deliberately open an existing APK file from the file list and hand it to Android's system package installer. OpenCommander does not download APKs, does not self-update and never installs an app silently. Every installation is initiated by the user and remains subject to Android's system confirmation.
+
+### Android TV
+
+- Leanback Launcher: Ja
+- Touchscreen erforderlich: Nein
+- Bedienung: Fünf-Wege-Steuerkreuz und OK-Taste
+- TV-Banner: 320 x 180 Pixel
+- TV-Screenshot: muss aus dem getesteten TV-Build hochgeladen werden
 
 ## Noch vor dem Absenden einzutragen
 

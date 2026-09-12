@@ -3,13 +3,18 @@ package com.opencommander;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
+import android.app.UiModeManager;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.database.Cursor;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
@@ -22,7 +27,9 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.provider.DocumentsContract;
 import android.text.InputType;
+import android.view.GestureDetector;
 import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.inputmethod.EditorInfo;
@@ -30,10 +37,13 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.view.Window;
 import android.webkit.MimeTypeMap;
 import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.HorizontalScrollView;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -63,15 +73,19 @@ import java.util.zip.ZipOutputStream;
 
 public class MainActivity extends Activity {
     private static final int REQUEST_STORAGE = 100;
-    private static final long DOUBLE_TAP_MS = 450L;
+    private static final int REQUEST_DOCUMENT_TREE = 101;
+    private static final long DOUBLE_TAP_MS = 1200L;
     private static final String PREF_DARK_MODE = "dark_mode";
     private static final String PREF_LANGUAGE = "language";
+    private static final String PREF_ONBOARDING_SHOWN = "onboarding_shown";
+    private static final String PREF_DOCUMENT_TREE = "document_tree";
 
     private CommanderPane leftPane;
     private CommanderPane rightPane;
     private CommanderPane activeDragPane;
     private Switch darkModeSwitch;
     private Button undoButton;
+    private Button renameButton;
     private Button zipButton;
     private Button deleteButton;
     private Button historyButton;
@@ -87,13 +101,14 @@ public class MainActivity extends Activity {
     private boolean historyExpanded;
     private boolean darkMode;
     private ThemeColors theme;
+    private FileEntry pendingPackageEntry;
     private int baseTopPadding;
     private int baseBottomPadding;
+    private boolean storageAccessAtLastBuild;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        requestStorageAccessIfNeeded();
 
         SharedPreferences prefs = getPreferences(MODE_PRIVATE);
         applyLanguage(prefs.getString(PREF_LANGUAGE, ""));
@@ -101,25 +116,41 @@ public class MainActivity extends Activity {
         theme = new ThemeColors(darkMode);
         prefs.edit().remove("left").remove("right").apply();
 
-        File start = deviceRoot();
+        FileEntry start = initialRootEntry();
         leftPane = new CommanderPane("1", start, "#1E66C1");
         rightPane = new CommanderPane("2", start, "#1F8A5B");
         buildLayout();
-        refreshEverything(getString(R.string.ready));
+        refreshEverything(storageStatusMessage());
     }
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         buildLayout();
-        refreshEverything(getString(R.string.ready));
+        refreshEverything(storageStatusMessage());
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         if (leftPane != null && rightPane != null) {
-            refreshEverything(getString(R.string.ready));
+            boolean hasAccess = hasUsableStorageAccess();
+            if (hasAccess != storageAccessAtLastBuild) {
+                leftPane.reloadTreeKeepingExpansion();
+                rightPane.reloadTreeKeepingExpansion();
+                buildLayout();
+            }
+            refreshEverything(storageStatusMessage());
+            if (hasAccess) {
+                maybeShowFirstRunHelp();
+            }
+        }
+        if (pendingPackageEntry != null
+                && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O
+                || getPackageManager().canRequestPackageInstalls())) {
+            FileEntry entry = pendingPackageEntry;
+            pendingPackageEntry = null;
+            launchPackageInstaller(entry);
         }
     }
 
@@ -158,6 +189,15 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT);
         topBarParams.setMargins(0, 0, 0, portrait ? dp(6) : dp(3));
         root.addView(createTopBar(), topBarParams);
+
+        storageAccessAtLastBuild = hasUsableStorageAccess();
+        if (!storageAccessAtLastBuild || Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+            LinearLayout.LayoutParams noticeParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+            noticeParams.setMargins(0, 0, 0, dp(8));
+            root.addView(createStorageNotice(), noticeParams);
+        }
 
         historyPanel = new LinearLayout(this);
         historyPanel.setOrientation(LinearLayout.VERTICAL);
@@ -210,6 +250,9 @@ public class MainActivity extends Activity {
 
         setContentView(root);
         updateUndoButton();
+        if (isTelevision() && leftPane.fileList != null) {
+            root.post(() -> leftPane.fileList.requestFocus());
+        }
     }
 
     private LinearLayout.LayoutParams paneParams(boolean portrait, boolean first) {
@@ -259,6 +302,10 @@ public class MainActivity extends Activity {
             addHeaderButton(titleRow, legalButton);
         }
 
+        Button helpButton = miniButton(getString(R.string.help));
+        makeLowPriorityButton(helpButton);
+        helpButton.setOnClickListener(view -> showHelpDialog());
+
         languageButton = miniButton(getString(R.string.language));
         makeLowPriorityButton(languageButton);
         languageButton.setOnClickListener(view -> showLanguageDialog());
@@ -298,14 +345,21 @@ public class MainActivity extends Activity {
         deleteButton.setOnClickListener(view -> confirmDeleteSelection());
         addControlButton(controlsRow, deleteButton, landscape);
 
+        renameButton = miniButton(getString(R.string.rename_button));
+        tintButton(renameButton, "#E8F1FF", "#78A9E8", "#174A7E", "#1F344D", "#4F7FAF", "#E8F2FF");
         if (landscape) {
-            Button operationButton = miniButton(moveMode ? getString(R.string.move) : getString(R.string.copy));
+            makeLandscapeButton(renameButton);
+        } else {
+            makeSecondaryPortraitButton(renameButton);
+        }
+        renameButton.setOnClickListener(view -> showRenameDialog());
+        addControlButton(controlsRow, renameButton, landscape);
+
+        if (landscape) {
+            Button operationButton = miniButton(operationModeLabel());
             tintButton(operationButton, "#E9F8EF", "#91D5A7", "#1F6B3A", "#173F2A", "#2D8A50", "#DDFBE8");
             makeLandscapeButton(operationButton);
-            operationButton.setOnClickListener(view -> {
-                moveMode = !moveMode;
-                operationButton.setText(moveMode ? getString(R.string.move) : getString(R.string.copy));
-            });
+            operationButton.setOnClickListener(view -> showOperationModeDialog(operationButton));
             addControlButton(controlsRow, operationButton, true);
 
             Button themeButton = miniButton(darkMode ? getString(R.string.light) : getString(R.string.dark));
@@ -348,20 +402,21 @@ public class MainActivity extends Activity {
         zipButton.setOnClickListener(view -> createZipFromCurrentSelection());
         addControlButton(controlsRow, zipButton, landscape);
         addControlButton(controlsRow, historyButton, landscape);
+        if (!landscape) {
+            addControlButton(controlsRow, helpButton, false);
+        }
 
         View spacer = new View(this);
         controlsRow.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
 
         if (landscape) {
             addControlButton(controlsRow, legalButton, true);
+            addControlButton(controlsRow, helpButton, true);
             addControlButton(controlsRow, languageButton, true);
         } else {
-            Button operationButton = miniButton(moveMode ? getString(R.string.move) : getString(R.string.copy));
+            Button operationButton = miniButton(operationModeLabel());
             tintButton(operationButton, "#DDF9E9", "#6ECB8B", "#145A2D", "#123B26", "#2B9360", "#D8F8E7");
-            operationButton.setOnClickListener(view -> {
-                moveMode = !moveMode;
-                operationButton.setText(moveMode ? getString(R.string.move) : getString(R.string.copy));
-            });
+            operationButton.setOnClickListener(view -> showOperationModeDialog(operationButton));
             addControlButton(controlsRow, operationButton, false);
 
             darkModeSwitch = new Switch(this);
@@ -379,22 +434,114 @@ public class MainActivity extends Activity {
             });
             controlsRow.addView(darkModeSwitch);
         }
-        View controlsView = controlsRow;
-        if (landscape) {
-            HorizontalScrollView scroll = new HorizontalScrollView(this);
-            scroll.setHorizontalScrollBarEnabled(false);
-            scroll.setFillViewport(false);
-            scroll.addView(controlsRow, new HorizontalScrollView.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
-            controlsView = scroll;
-        }
+        HorizontalScrollView controlsView = new HorizontalScrollView(this);
+        controlsView.setHorizontalScrollBarEnabled(true);
+        controlsView.setScrollbarFadingEnabled(false);
+        controlsView.setFillViewport(false);
+        controlsView.addView(controlsRow, new HorizontalScrollView.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
         topBar.addView(controlsView, new LinearLayout.LayoutParams(
                 landscape ? 0 : ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 landscape ? 0.84f : 0f));
 
         return topBar;
+    }
+
+    private View createStorageNotice() {
+        boolean portrait = getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT;
+        LinearLayout notice = new LinearLayout(this);
+        notice.setOrientation(portrait ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        notice.setGravity(Gravity.CENTER_VERTICAL);
+        notice.setPadding(dp(12), dp(8), dp(8), dp(8));
+        notice.setBackground(rounded(
+                darkMode ? "#4A3218" : "#FFF4D6",
+                darkMode ? "#A66A22" : "#D99A2B",
+                1,
+                10));
+
+        TextView message = new TextView(this);
+        message.setText(Build.VERSION.SDK_INT == Build.VERSION_CODES.Q
+                ? getString(hasUsableStorageAccess()
+                        ? R.string.storage_android10_selected_message
+                        : R.string.storage_android10_message)
+                : getString(R.string.storage_access_required));
+        message.setTextColor(color(darkMode ? "#FFE8B0" : "#5F3D00"));
+        message.setTextSize(12);
+        message.setSingleLine(false);
+        LinearLayout.LayoutParams messageParams = portrait
+                ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                : new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        notice.addView(message, messageParams);
+
+        Button action = miniButton(Build.VERSION.SDK_INT == Build.VERSION_CODES.Q
+                ? getString(hasUsableStorageAccess() ? R.string.details : R.string.choose_folder)
+                : getString(R.string.grant_access));
+        action.setOnClickListener(view -> {
+            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q && hasUsableStorageAccess()) {
+                showAndroid10StorageDialog();
+            } else {
+                requestStorageAccess();
+            }
+        });
+        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                dp(38));
+        actionParams.setMargins(portrait ? 0 : dp(8), portrait ? dp(6) : 0, 0, 0);
+        if (portrait) {
+            actionParams.gravity = Gravity.END;
+        }
+        notice.addView(action, actionParams);
+        return notice;
+    }
+
+    private String operationModeLabel() {
+        return getString(moveMode ? R.string.operation_mode_move : R.string.operation_mode_copy);
+    }
+
+    private void showOperationModeDialog(Button operationButton) {
+        String[] choices = {getString(R.string.copy), getString(R.string.move)};
+        new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.operation_mode_title))
+                .setSingleChoiceItems(choices, moveMode ? 1 : 0, (dialog, which) -> {
+                    moveMode = which == 1;
+                    operationButton.setText(operationModeLabel());
+                    dialog.dismiss();
+                    updateGlobalStatus(getString(moveMode
+                            ? R.string.operation_mode_move_active
+                            : R.string.operation_mode_copy_active));
+                })
+                .setNegativeButton(getString(R.string.cancel), null)
+                .show();
+    }
+
+    private void showHelpDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.help_title))
+                .setMessage(getString(R.string.help_message)
+                        + "\n\n" + getString(R.string.help_access_android)
+                        + "\n\n" + getString(R.string.apk_tv_help))
+                .setPositiveButton(getString(R.string.understood), null)
+                .show();
+    }
+
+    private void maybeShowFirstRunHelp() {
+        SharedPreferences prefs = getPreferences(MODE_PRIVATE);
+        if (prefs.getBoolean(PREF_ONBOARDING_SHOWN, false)) {
+            return;
+        }
+        prefs.edit().putBoolean(PREF_ONBOARDING_SHOWN, true).apply();
+        showHelpDialog();
+    }
+
+    private void showAndroid10StorageDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.storage_android10_title))
+                .setMessage(getString(R.string.storage_android10_details))
+                .setPositiveButton(getString(R.string.choose_another_folder), (dialog, which) -> requestStorageAccess())
+                .setNegativeButton(getString(R.string.understood), null)
+                .show();
     }
 
     private void showLegalDialog() {
@@ -406,7 +553,7 @@ public class MainActivity extends Activity {
     }
 
     private void showLanguageDialog() {
-        String[] codes = {"", "de", "en", "fr", "es", "it", "pt", "nl"};
+        String[] codes = {"", "de", "en", "fr", "es", "it", "pt", "nl", "zh-Hans", "ja", "ko", "ar", "hi", "ru", "tr", "pl", "id", "vi", "th", "uk", "sv"};
         String[] labels = {
                 getString(R.string.language_system),
                 "Deutsch",
@@ -415,7 +562,20 @@ public class MainActivity extends Activity {
                 "Español",
                 "Italiano",
                 "Português",
-                "Nederlands"
+                "Nederlands",
+                "简体中文",
+                "日本語",
+                "한국어",
+                "العربية",
+                "हिन्दी",
+                "Русский",
+                "Türkçe",
+                "Polski",
+                "Bahasa Indonesia",
+                "Tiếng Việt",
+                "ไทย",
+                "Українська",
+                "Svenska"
         };
         String current = getPreferences(MODE_PRIVATE).getString(PREF_LANGUAGE, "");
         int checked = 0;
@@ -439,10 +599,11 @@ public class MainActivity extends Activity {
     }
 
     private void applyLanguage(String code) {
-        Locale locale = code == null || code.isEmpty() ? systemLocale : new Locale(code);
+        Locale locale = code == null || code.isEmpty() ? systemLocale : Locale.forLanguageTag(code);
         Locale.setDefault(locale);
         Configuration configuration = new Configuration(getResources().getConfiguration());
         configuration.setLocale(locale);
+        configuration.setLayoutDirection(locale);
         getResources().updateConfiguration(configuration, getResources().getDisplayMetrics());
     }
 
@@ -456,7 +617,7 @@ public class MainActivity extends Activity {
         button.setMinWidth(0);
         button.setPadding(dp(10), 0, dp(10), 0);
         button.setGravity(Gravity.CENTER);
-        button.setBackground(rounded(theme.buttonBackground, theme.buttonBorder, 1, 8));
+        applyButtonFocusStyle(button, theme.buttonBackground, theme.buttonBorder);
         return button;
     }
 
@@ -515,12 +676,23 @@ public class MainActivity extends Activity {
     private void tintButton(Button button,
                             String lightFill, String lightStroke, String lightText,
                             String darkFill, String darkStroke, String darkText) {
+        String fill = darkMode ? darkFill : lightFill;
+        String stroke = darkMode ? darkStroke : lightStroke;
         button.setTextColor(color(darkMode ? darkText : lightText));
-        button.setBackground(rounded(
-                darkMode ? darkFill : lightFill,
-                darkMode ? darkStroke : lightStroke,
-                1,
-                8));
+        applyButtonFocusStyle(button, fill, stroke);
+    }
+
+    private void applyButtonFocusStyle(Button button, String fill, String stroke) {
+        button.setBackground(rounded(fill, stroke, 1, 8));
+        button.setOnFocusChangeListener((view, hasFocus) -> {
+            button.setBackground(rounded(fill, hasFocus ? "#FFD54F" : stroke,
+                    hasFocus ? 3 : 1, 8));
+        });
+    }
+
+    private boolean isTelevision() {
+        UiModeManager manager = (UiModeManager) getSystemService(UI_MODE_SERVICE);
+        return manager != null && manager.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION;
     }
 
     private File deviceRoot() {
@@ -529,6 +701,52 @@ public class MainActivity extends Activity {
             start = getFilesDir();
         }
         return start;
+    }
+
+    private FileEntry initialRootEntry() {
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+            String saved = getPreferences(MODE_PRIVATE).getString(PREF_DOCUMENT_TREE, "");
+            if (saved != null && !saved.isEmpty()) {
+                FileEntry documentRoot = documentEntryFromTree(Uri.parse(saved));
+                if (documentRoot != null) {
+                    return documentRoot;
+                }
+            }
+        }
+        return new FileEntry(deviceRoot(), null);
+    }
+
+    private FileEntry documentEntryFromTree(Uri treeUri) {
+        try {
+            String rootId = DocumentsContract.getTreeDocumentId(treeUri);
+            Uri documentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, rootId);
+            return queryDocumentEntry(documentUri, null);
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    private FileEntry queryDocumentEntry(Uri documentUri, FileEntry parent) {
+        String[] projection = {
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_MIME_TYPE,
+                DocumentsContract.Document.COLUMN_SIZE,
+                DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+                DocumentsContract.Document.COLUMN_FLAGS
+        };
+        try (Cursor cursor = getContentResolver().query(documentUri, projection, null, null, null)) {
+            if (cursor == null || !cursor.moveToFirst()) {
+                return null;
+            }
+            String name = cursor.getString(0);
+            String mime = cursor.getString(1);
+            long size = cursor.isNull(2) ? 0L : cursor.getLong(2);
+            long modified = cursor.isNull(3) ? 0L : cursor.getLong(3);
+            int flags = cursor.isNull(4) ? 0 : cursor.getInt(4);
+            return new FileEntry(documentUri, parent, name, mime, size, modified, flags);
+        } catch (Exception exception) {
+            return null;
+        }
     }
 
     private void refreshEverything(String message) {
@@ -545,7 +763,7 @@ public class MainActivity extends Activity {
             updateGlobalStatus(getString(R.string.no_file_selected));
             return;
         }
-        if (targetDirectory == null || !targetDirectory.isPhysicalDirectory() || !targetDirectory.file.canWrite()) {
+        if (targetDirectory == null || !targetDirectory.canWriteDirectory()) {
             updateGlobalStatus(getString(R.string.target_not_writable));
             return;
         }
@@ -563,7 +781,7 @@ public class MainActivity extends Activity {
         }
 
         boolean move = moveMode;
-        List<FileEntry> conflicts = conflictingSources(sources, targetDirectory.file, move);
+        List<FileEntry> conflicts = conflictingSources(sources, targetDirectory, move);
         if (!conflicts.isEmpty()) {
             new AlertDialog.Builder(this)
                     .setTitle(getString(R.string.target_exists_title))
@@ -578,6 +796,15 @@ public class MainActivity extends Activity {
         }
 
         executeFileOperation(sourcePane, targetDirectory, sources, move, ConflictMode.KEEP);
+    }
+
+    private String archiveNameForSources(List<FileEntry> sources, String currentDirectoryName) {
+        String rawName = sources.size() == 1 ? sources.get(0).name() : currentDirectoryName;
+        int dot = rawName.lastIndexOf('.');
+        String base = sources.size() == 1 && !sources.get(0).isPhysicalDirectory() && dot > 0
+                ? rawName.substring(0, dot)
+                : rawName;
+        return (base.isEmpty() ? "Archive" : base) + ".zip";
     }
 
     private void createZipFromCurrentSelection() {
@@ -608,8 +835,14 @@ public class MainActivity extends Activity {
             }
         }
 
+        if (pane.currentDirectory.isDocument()) {
+            createDocumentZip(pane, sources);
+            return;
+        }
+
         CommanderPane sourcePane = pane;
-        File zipFile = uniqueFile(sourcePane.currentDirectory.file, "OpenCommander.zip");
+        String requestedZipName = archiveNameForSources(sources, sourcePane.currentDirectory.name());
+        File zipFile = uniqueFile(sourcePane.currentDirectory.file, requestedZipName);
         LastOperation operation = new LastOperation(false, prepareBackupRoot(), true);
         showProgress(getString(R.string.zip_creating, sources.size()), 0);
 
@@ -654,6 +887,103 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private void createDocumentZip(CommanderPane sourcePane, List<FileEntry> sources) {
+        FileEntry directory = sourcePane.currentDirectory;
+        String zipName = uniqueStorageName(directory, archiveNameForSources(sources, directory.name()));
+        LastOperation operation = new LastOperation(false, prepareBackupRoot(), true);
+        showProgress(getString(R.string.zip_creating, sources.size()), 0);
+        new Thread(() -> {
+            FileEntry zipEntry = null;
+            String error = null;
+            ProgressCounter counter = new ProgressCounter(sources);
+            try {
+                Uri created = DocumentsContract.createDocument(getContentResolver(), directory.documentUri,
+                        "application/zip", zipName);
+                zipEntry = created == null ? null : queryDocumentEntry(created, directory);
+                if (zipEntry == null) {
+                    throw new IOException(getString(R.string.zip_failed, zipName));
+                }
+                try (OutputStream raw = getContentResolver().openOutputStream(zipEntry.documentUri, "w");
+                     ZipOutputStream output = raw == null ? null : new ZipOutputStream(raw)) {
+                    if (output == null) {
+                        throw new IOException(getString(R.string.zip_failed, zipName));
+                    }
+                    Set<String> usedNames = new HashSet<>();
+                    for (FileEntry source : sources) {
+                        addEntryToZip(source, source.name(), output, usedNames, counter);
+                        counter.itemDone();
+                    }
+                }
+                operation.storageRecords.add(new StorageOperationRecord(
+                        null, null, directory, zipName, zipEntry, null, null));
+            } catch (IOException | SecurityException exception) {
+                error = exception.getMessage();
+                if (zipEntry != null) {
+                    try {
+                        deleteStorageEntry(zipEntry);
+                    } catch (IOException ignored) {
+                        // Best effort cleanup of an incomplete archive.
+                    }
+                }
+            }
+            String finalError = error;
+            runOnUiThread(() -> {
+                sourcePane.clearSelection();
+                leftPane.reloadTreeKeepingExpansion();
+                rightPane.reloadTreeKeepingExpansion();
+                leftPane.refreshFiles();
+                rightPane.refreshFiles();
+                if (finalError == null) {
+                    undoHistory.add(0, operation);
+                    while (undoHistory.size() > 12) {
+                        undoHistory.remove(undoHistory.size() - 1);
+                    }
+                }
+                finishProgress(finalError == null
+                        ? getString(R.string.zip_created, zipName)
+                        : getString(R.string.zip_failed, finalError));
+                updateUndoButton();
+                rebuildHistoryPanel();
+            });
+        }).start();
+    }
+
+    private void addEntryToZip(FileEntry source, String path, ZipOutputStream output,
+                               Set<String> usedNames, ProgressCounter counter) throws IOException {
+        String safePath = path.replace(File.separatorChar, '/');
+        if (source.isPhysicalDirectory()) {
+            String directoryPath = safePath.endsWith("/") ? safePath : safePath + "/";
+            if (usedNames.add(directoryPath)) {
+                output.putNextEntry(new ZipEntry(directoryPath));
+                output.closeEntry();
+            }
+            for (FileEntry child : source.children(false)) {
+                addEntryToZip(child, directoryPath + child.name(), output, usedNames, counter);
+            }
+            return;
+        }
+        String entryName = uniqueZipEntryName(safePath, usedNames);
+        ZipEntry entry = new ZipEntry(entryName);
+        entry.setTime(source.modified());
+        output.putNextEntry(entry);
+        try (InputStream input = source.isDocument()
+                ? getContentResolver().openInputStream(source.documentUri)
+                : new FileInputStream(source.file)) {
+            if (input == null) {
+                throw new IOException(getString(R.string.no_readable_selection));
+            }
+            byte[] buffer = new byte[1024 * 64];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+                if (counter != null) {
+                    counter.addBytes(read);
+                }
+            }
+        }
+        output.closeEntry();
+    }
+
     private void confirmDeleteSelection() {
         List<CommanderPane> panes = selectedPanes();
         if (panes.isEmpty()) {
@@ -670,8 +1000,10 @@ public class MainActivity extends Activity {
                 updateGlobalStatus(getString(R.string.zip_read_only));
                 return;
             }
-            File parent = source.file.getParentFile();
-            if (parent == null || !parent.canWrite()) {
+            File parent = source.isDocument() ? null : source.file.getParentFile();
+            if (source.isDocument()
+                    ? source.parent == null || !source.parent.canWriteDirectory()
+                    : parent == null || !parent.canWrite()) {
                 updateGlobalStatus(getString(R.string.target_not_writable));
                 return;
             }
@@ -686,6 +1018,112 @@ public class MainActivity extends Activity {
                         executeDeleteOperation(panes, sources, true))
                 .setNeutralButton(getString(R.string.cancel), null)
                 .show();
+    }
+
+    private void showRenameDialog() {
+        List<CommanderPane> panes = selectedPanes();
+        List<FileEntry> sources = selectedEntriesFromPanes(panes);
+        if (sources.size() != 1) {
+            updateGlobalStatus(getString(R.string.rename_single_selection));
+            return;
+        }
+
+        FileEntry source = sources.get(0);
+        if (!source.isPhysical()) {
+            updateGlobalStatus(getString(R.string.zip_read_only));
+            return;
+        }
+        File parent = source.isDocument() ? null : source.file.getParentFile();
+        if (source.isDocument()
+                ? source.parent == null || !source.parent.canWriteDirectory()
+                : parent == null || !parent.canWrite()) {
+            updateGlobalStatus(getString(R.string.target_not_writable));
+            return;
+        }
+
+        EditText nameInput = new EditText(this);
+        nameInput.setSingleLine(true);
+        nameInput.setText(source.name());
+        nameInput.setSelectAllOnFocus(true);
+        nameInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        int dialogPadding = dp(20);
+        LinearLayout container = new LinearLayout(this);
+        container.setPadding(dialogPadding, 0, dialogPadding, 0);
+        container.addView(nameInput, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.rename_title))
+                .setView(container)
+                .setPositiveButton(getString(R.string.rename_button), null)
+                .setNegativeButton(getString(R.string.cancel), null)
+                .create();
+        dialog.setOnShowListener(unused -> {
+            nameInput.requestFocus();
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+                String newName = nameInput.getText() == null ? "" : nameInput.getText().toString().trim();
+                if (!isValidFileName(newName)) {
+                    nameInput.setError(getString(R.string.rename_invalid_name));
+                    return;
+                }
+                if (newName.equals(source.name())) {
+                    dialog.dismiss();
+                    return;
+                }
+
+                if (source.isDocument()) {
+                    if (source.parent.findChild(newName) != null) {
+                        nameInput.setError(getString(R.string.target_exists_title));
+                        return;
+                    }
+                    try {
+                        Uri renamed = DocumentsContract.renameDocument(getContentResolver(), source.documentUri, newName);
+                        if (renamed == null) {
+                            throw new IOException(getString(R.string.rename_failed));
+                        }
+                    } catch (IOException | SecurityException exception) {
+                        nameInput.setError(getString(R.string.rename_failed));
+                        return;
+                    }
+                    leftPane.ensureDocumentDirectoryReadable();
+                    rightPane.ensureDocumentDirectoryReadable();
+                } else {
+                    File destination = new File(parent, newName);
+                    if (destination.exists()) {
+                        nameInput.setError(getString(R.string.target_exists_title));
+                        return;
+                    }
+                    try {
+                        java.nio.file.Files.move(source.file.toPath(), destination.toPath());
+                    } catch (IOException | SecurityException exception) {
+                        nameInput.setError(getString(R.string.rename_failed));
+                        return;
+                    }
+                    leftPane.rebaseAfterRename(source.file, destination);
+                    rightPane.rebaseAfterRename(source.file, destination);
+                }
+                leftPane.clearSelection();
+                rightPane.clearSelection();
+                leftPane.reloadTreeKeepingExpansion();
+                rightPane.reloadTreeKeepingExpansion();
+                leftPane.refreshFiles();
+                rightPane.refreshFiles();
+                dialog.dismiss();
+                updateGlobalStatus(getString(R.string.renamed_item, newName));
+            });
+        });
+        dialog.show();
+    }
+
+    private boolean isValidFileName(String name) {
+        return name != null
+                && !name.isEmpty()
+                && !".".equals(name)
+                && !"..".equals(name)
+                && name.indexOf('/') < 0
+                && name.indexOf('\\') < 0
+                && name.indexOf('\0') < 0;
     }
 
     private List<CommanderPane> selectedPanes() {
@@ -708,7 +1146,7 @@ public class MainActivity extends Activity {
         for (CommanderPane pane : panes) {
             for (FileEntry entry : pane.selectedEntries()) {
                 String key = entry.key();
-                if (entry.isPhysical()) {
+                if (entry.file != null && entry.isPhysical()) {
                     try {
                         key = entry.file.getCanonicalPath();
                     } catch (IOException ignored) {
@@ -724,6 +1162,12 @@ public class MainActivity extends Activity {
     }
 
     private void executeDeleteOperation(List<CommanderPane> sourcePanes, List<FileEntry> sources, boolean trash) {
+        for (FileEntry source : sources) {
+            if (source.isDocument()) {
+                executeDocumentDeleteOperation(sourcePanes, sources, trash);
+                return;
+            }
+        }
         LastOperation operation = new LastOperation(false, prepareBackupRoot(), false, !trash, trash);
         showProgress(getString(R.string.deleting_items, sources.size()), 0);
 
@@ -775,6 +1219,91 @@ public class MainActivity extends Activity {
                 rebuildHistoryPanel();
             });
         }).start();
+    }
+
+    private void executeDocumentDeleteOperation(List<CommanderPane> sourcePanes,
+                                                List<FileEntry> sources, boolean trash) {
+        LastOperation operation = new LastOperation(false, prepareBackupRoot(), false, !trash, trash);
+        showProgress(getString(R.string.deleting_items, sources.size()), 0);
+        new Thread(() -> {
+            ProgressCounter counter = new ProgressCounter(sources);
+            int done = 0;
+            String error = null;
+            for (FileEntry source : sources) {
+                try {
+                    File backup = backupStorageEntry(source, operation.backupRoot);
+                    FileEntry destination = null;
+                    if (trash) {
+                        if (source.isDocument()) {
+                            FileEntry trashFolder = source.parent.findChild(".OpenCommanderTrash");
+                            if (trashFolder == null) {
+                                trashFolder = createDocumentDirectory(source.parent, ".OpenCommanderTrash");
+                            }
+                            String name = uniqueStorageName(trashFolder, source.name());
+                            destination = copyEntryToDirectory(source, trashFolder, name, counter);
+                            deleteStorageEntry(source);
+                        } else {
+                            File moved = moveToTrash(source.file, counter);
+                            destination = new FileEntry(moved, null);
+                        }
+                    } else {
+                        deleteStorageEntry(source);
+                    }
+                    operation.storageRecords.add(new StorageOperationRecord(
+                            source.parent, source.name(), destination == null ? null : destination.parent,
+                            destination == null ? null : destination.name(), destination, backup, null));
+                    counter.itemDone();
+                    done++;
+                } catch (IOException exception) {
+                    error = exception.getMessage();
+                    break;
+                }
+            }
+            int finalDone = done;
+            String finalError = error;
+            runOnUiThread(() -> {
+                for (CommanderPane pane : sourcePanes) {
+                    pane.clearSelection();
+                }
+                leftPane.ensureDocumentDirectoryReadable();
+                rightPane.ensureDocumentDirectoryReadable();
+                leftPane.reloadTreeKeepingExpansion();
+                rightPane.reloadTreeKeepingExpansion();
+                leftPane.refreshFiles();
+                rightPane.refreshFiles();
+                if (!operation.storageRecords.isEmpty()) {
+                    undoHistory.add(0, operation);
+                    while (undoHistory.size() > 12) {
+                        undoHistory.remove(undoHistory.size() - 1);
+                    }
+                }
+                if (finalError == null) {
+                    finishProgress(trash ? getString(R.string.trashed_items, finalDone)
+                            : getString(R.string.deleted_items, finalDone));
+                } else {
+                    finishProgress(getString(R.string.error_prefix, finalError));
+                }
+                updateUndoButton();
+                rebuildHistoryPanel();
+            });
+        }).start();
+    }
+
+    private FileEntry createDocumentDirectory(FileEntry parent, String name) throws IOException {
+        if (parent == null || !parent.isDocument()) {
+            throw new IOException(getString(R.string.cannot_create_folder, name));
+        }
+        try {
+            Uri created = DocumentsContract.createDocument(getContentResolver(), parent.documentUri,
+                    DocumentsContract.Document.MIME_TYPE_DIR, name);
+            FileEntry result = created == null ? null : queryDocumentEntry(created, parent);
+            if (result == null) {
+                throw new IOException(getString(R.string.cannot_create_folder, name));
+            }
+            return result;
+        } catch (SecurityException exception) {
+            throw new IOException(getString(R.string.cannot_create_folder, name), exception);
+        }
     }
 
     private void addFileToZip(File source, String path, ZipOutputStream output,
@@ -832,26 +1361,42 @@ public class MainActivity extends Activity {
         return candidate;
     }
 
-    private List<FileEntry> conflictingSources(List<FileEntry> sources, File targetFolder, boolean move) {
+    private List<FileEntry> conflictingSources(List<FileEntry> sources, FileEntry targetFolder, boolean move) {
         List<FileEntry> conflicts = new ArrayList<>();
         for (FileEntry source : sources) {
-            File preferredDestination = new File(targetFolder, source.file.getName());
-            if (!preferredDestination.exists()) {
-                continue;
+            if (source.isDocument() || targetFolder.isDocument()) {
+                FileEntry existing = targetFolder.findChild(source.name());
+                if (existing != null && !existing.key().equals(source.key())
+                        && !(move && source.parent != null && source.parent.key().equals(targetFolder.key()))) {
+                    conflicts.add(source);
+                }
+            } else {
+                File preferredDestination = new File(targetFolder.file, source.file.getName());
+                if (!preferredDestination.exists()) {
+                    continue;
+                }
+                if (sameFile(source.file, preferredDestination)) {
+                    continue;
+                }
+                if (move && sameFile(source.file.getParentFile(), targetFolder.file)) {
+                    continue;
+                }
+                conflicts.add(source);
             }
-            if (sameFile(source.file, preferredDestination)) {
-                continue;
-            }
-            if (move && sameFile(source.file.getParentFile(), targetFolder)) {
-                continue;
-            }
-            conflicts.add(source);
         }
         return conflicts;
     }
 
     private void executeFileOperation(CommanderPane sourcePane, FileEntry targetDirectory,
                                       List<FileEntry> sources, boolean move, ConflictMode conflictMode) {
+        boolean documentOperation = targetDirectory.isDocument();
+        for (FileEntry source : sources) {
+            documentOperation |= source.isDocument();
+        }
+        if (documentOperation) {
+            executeDocumentFileOperation(sourcePane, targetDirectory, sources, move, conflictMode);
+            return;
+        }
         LastOperation operation = new LastOperation(move, prepareBackupRoot());
         showProgress(move ? getString(R.string.moving_items, sources.size()) : getString(R.string.copying_items, sources.size()), 0);
 
@@ -939,6 +1484,267 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private void executeDocumentFileOperation(CommanderPane sourcePane, FileEntry targetDirectory,
+                                              List<FileEntry> sources, boolean move, ConflictMode conflictMode) {
+        LastOperation operation = new LastOperation(move, prepareBackupRoot());
+        showProgress(move ? getString(R.string.moving_items, sources.size())
+                : getString(R.string.copying_items, sources.size()), 0);
+        new Thread(() -> {
+            ProgressCounter counter = new ProgressCounter(sources);
+            counter.publish(true);
+            int done = 0;
+            String error = null;
+            for (FileEntry source : sources) {
+                File sourceBackup = null;
+                File replacedBackup = null;
+                FileEntry destination = null;
+                String destinationName = source.name();
+                try {
+                    if (source.isPhysicalDirectory() && isEntryInside(source, targetDirectory)) {
+                        throw new IOException(getString(R.string.cannot_copy_into_self, source.name()));
+                    }
+                    if (source.parent != null && source.parent.key().equals(targetDirectory.key())) {
+                        continue;
+                    }
+                    FileEntry existing = targetDirectory.findChild(destinationName);
+                    if (existing != null && existing.key().equals(source.key())) {
+                        continue;
+                    }
+                    if (existing != null && conflictMode == ConflictMode.KEEP) {
+                        destinationName = uniqueStorageName(targetDirectory, destinationName);
+                        existing = null;
+                    }
+
+                    if (move) {
+                        sourceBackup = backupStorageEntry(source, operation.backupRoot);
+                    }
+                    if (existing != null) {
+                        replacedBackup = backupStorageEntry(existing, operation.backupRoot);
+                    }
+
+                    if (existing != null) {
+                        String temporaryName = uniqueStorageName(targetDirectory,
+                                ".opencommander-" + SystemClock.elapsedRealtime() + "-" + destinationName);
+                        destination = copyEntryToDirectory(source, targetDirectory, temporaryName, counter);
+                        deleteStorageEntry(existing);
+                        destination = renameStorageEntry(destination, destinationName);
+                        if (destination == null) {
+                            throw new IOException(getString(R.string.rename_failed));
+                        }
+                    } else {
+                        destination = copyEntryToDirectory(source, targetDirectory, destinationName, counter);
+                    }
+
+                    if (move) {
+                        deleteStorageEntry(source);
+                    }
+                    operation.storageRecords.add(new StorageOperationRecord(
+                            source.parent, source.name(), targetDirectory, destinationName,
+                            destination, sourceBackup, replacedBackup));
+                    counter.itemDone();
+                    done++;
+                } catch (IOException exception) {
+                    try {
+                        if (destination != null && storageEntryExists(destination)) {
+                            deleteStorageEntry(destination);
+                        }
+                        if (replacedBackup != null) {
+                            restoreStorageBackup(replacedBackup, targetDirectory, destinationName, null);
+                        }
+                    } catch (IOException ignored) {
+                        // Preserve the first failure; cleanup is best effort.
+                    }
+                    error = exception.getMessage();
+                    break;
+                }
+            }
+
+            int finalDone = done;
+            String finalError = error;
+            runOnUiThread(() -> {
+                sourcePane.clearSelection();
+                leftPane.ensureDocumentDirectoryReadable();
+                rightPane.ensureDocumentDirectoryReadable();
+                leftPane.reloadTreeKeepingExpansion();
+                rightPane.reloadTreeKeepingExpansion();
+                leftPane.refreshFiles();
+                rightPane.refreshFiles();
+                if (!operation.storageRecords.isEmpty()) {
+                    undoHistory.add(0, operation);
+                    while (undoHistory.size() > 12) {
+                        undoHistory.remove(undoHistory.size() - 1);
+                    }
+                }
+                if (finalError == null) {
+                    finishProgress(move ? getString(R.string.moved_items, finalDone)
+                            : getString(R.string.copied_items, finalDone));
+                } else {
+                    finishProgress(getString(R.string.error_prefix, finalError));
+                }
+                updateUndoButton();
+                rebuildHistoryPanel();
+            });
+        }).start();
+    }
+
+    private String uniqueStorageName(FileEntry directory, String name) {
+        if (directory.findChild(name) == null) {
+            return name;
+        }
+        String base = name;
+        String extension = "";
+        int dot = name.lastIndexOf('.');
+        if (dot > 0) {
+            base = name.substring(0, dot);
+            extension = name.substring(dot);
+        }
+        int index = 1;
+        String candidate;
+        do {
+            candidate = base + " (" + index++ + ")" + extension;
+        } while (directory.findChild(candidate) != null);
+        return candidate;
+    }
+
+    private FileEntry copyEntryToDirectory(FileEntry source, FileEntry targetDirectory,
+                                           String destinationName, ProgressCounter counter) throws IOException {
+        if (targetDirectory.isDocument()) {
+            String mime = source.isPhysicalDirectory()
+                    ? DocumentsContract.Document.MIME_TYPE_DIR
+                    : source.mimeType();
+            Uri created;
+            try {
+                created = DocumentsContract.createDocument(
+                        getContentResolver(), targetDirectory.documentUri, mime, destinationName);
+            } catch (Exception exception) {
+                throw new IOException(getString(R.string.cannot_create_folder, destinationName), exception);
+            }
+            if (created == null) {
+                throw new IOException(getString(R.string.cannot_create_folder, destinationName));
+            }
+            FileEntry destination = queryDocumentEntry(created, targetDirectory);
+            if (destination == null) {
+                throw new IOException(getString(R.string.cannot_create_folder, destinationName));
+            }
+            if (source.isPhysicalDirectory()) {
+                for (FileEntry child : source.children(false)) {
+                    copyEntryToDirectory(child, destination, child.name(), counter);
+                }
+            } else {
+                copyEntryBytes(source, destination, counter);
+            }
+            return destination;
+        }
+
+        File destinationFile = new File(targetDirectory.file, destinationName);
+        if (source.isPhysicalDirectory()) {
+            if (!destinationFile.exists() && !destinationFile.mkdirs()) {
+                throw new IOException(getString(R.string.cannot_create_folder, destinationName));
+            }
+            FileEntry destination = new FileEntry(destinationFile, targetDirectory);
+            for (FileEntry child : source.children(false)) {
+                copyEntryToDirectory(child, destination, child.name(), counter);
+            }
+            return destination;
+        }
+        FileEntry destination = new FileEntry(destinationFile, targetDirectory);
+        copyEntryBytes(source, destination, counter);
+        return destination;
+    }
+
+    private void copyEntryBytes(FileEntry source, FileEntry destination, ProgressCounter counter) throws IOException {
+        try (InputStream input = source.isDocument()
+                ? getContentResolver().openInputStream(source.documentUri)
+                : new FileInputStream(source.file);
+             OutputStream output = destination.isDocument()
+                     ? getContentResolver().openOutputStream(destination.documentUri, "w")
+                     : new FileOutputStream(destination.file)) {
+            if (input == null || output == null) {
+                throw new IOException(getString(R.string.no_readable_selection));
+            }
+            byte[] buffer = new byte[1024 * 64];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+                if (counter != null) {
+                    counter.addBytes(read);
+                }
+            }
+        }
+    }
+
+    private void deleteStorageEntry(FileEntry entry) throws IOException {
+        if (entry.isDocument()) {
+            try {
+                if (!DocumentsContract.deleteDocument(getContentResolver(), entry.documentUri)) {
+                    throw new IOException(getString(R.string.cannot_delete, entry.name()));
+                }
+            } catch (SecurityException exception) {
+                throw new IOException(getString(R.string.cannot_delete, entry.name()), exception);
+            }
+            return;
+        }
+        deleteRecursive(entry.file);
+    }
+
+    private FileEntry renameDocumentEntry(FileEntry entry, String newName) throws IOException {
+        if (!entry.isDocument()) {
+            return null;
+        }
+        try {
+            Uri renamed = DocumentsContract.renameDocument(getContentResolver(), entry.documentUri, newName);
+            return renamed == null ? null : queryDocumentEntry(renamed, entry.parent);
+        } catch (SecurityException exception) {
+            throw new IOException(getString(R.string.rename_failed), exception);
+        }
+    }
+
+    private FileEntry renameStorageEntry(FileEntry entry, String newName) throws IOException {
+        if (entry.isDocument()) {
+            return renameDocumentEntry(entry, newName);
+        }
+        File parent = entry.file.getParentFile();
+        if (parent == null) {
+            throw new IOException(getString(R.string.rename_failed));
+        }
+        File renamed = new File(parent, newName);
+        try {
+            java.nio.file.Files.move(entry.file.toPath(), renamed.toPath());
+        } catch (IOException | SecurityException exception) {
+            throw new IOException(getString(R.string.rename_failed), exception);
+        }
+        return new FileEntry(renamed, entry.parent);
+    }
+
+    private File backupStorageEntry(FileEntry source, File backupRoot) throws IOException {
+        File backup = uniqueFile(backupRoot, source.name());
+        FileEntry backupDirectory = new FileEntry(backupRoot, null);
+        FileEntry copied = copyEntryToDirectory(source, backupDirectory, backup.getName(), null);
+        return copied.file;
+    }
+
+    private FileEntry restoreStorageBackup(File backup, FileEntry parent, String name,
+                                           ProgressCounter counter) throws IOException {
+        if (backup == null || !backup.exists() || parent == null) {
+            throw new IOException(getString(R.string.undo_empty_action));
+        }
+        FileEntry existing = parent.findChild(name);
+        if (existing != null) {
+            throw new IOException(getString(R.string.target_exists_title));
+        }
+        return copyEntryToDirectory(new FileEntry(backup, null), parent, name, counter);
+    }
+
+    private boolean storageEntryExists(FileEntry entry) {
+        if (entry == null) {
+            return false;
+        }
+        if (entry.isDocument()) {
+            return queryDocumentEntry(entry.documentUri, entry.parent) != null;
+        }
+        return entry.file != null && entry.file.exists();
+    }
+
     private File prepareBackupRoot() {
         File root = new File(getCacheDir(), "undo_backup_" + SystemClock.elapsedRealtime());
         if (!root.exists()) {
@@ -992,8 +1798,12 @@ public class MainActivity extends Activity {
     }
 
     private void undoOperation(LastOperation operation) {
-        if (operation == null || operation.records.isEmpty()) {
+        if (operation == null || operation.recordCount() == 0) {
             updateGlobalStatus(getString(R.string.undo_empty_action));
+            return;
+        }
+        if (!operation.storageRecords.isEmpty()) {
+            undoStorageOperation(operation);
             return;
         }
 
@@ -1037,6 +1847,66 @@ public class MainActivity extends Activity {
             int finalDone = done;
             String finalError = error;
             runOnUiThread(() -> {
+                leftPane.reloadTreeKeepingExpansion();
+                rightPane.reloadTreeKeepingExpansion();
+                leftPane.refreshFiles();
+                rightPane.refreshFiles();
+                if (finalError == null) {
+                    undoHistory.remove(operation);
+                    finishProgress(getString(R.string.undo_done, finalDone));
+                } else {
+                    finishProgress(getString(R.string.undo_failed, finalError));
+                }
+                updateUndoButton();
+                rebuildHistoryPanel();
+            });
+        }).start();
+    }
+
+    private void undoStorageOperation(LastOperation operation) {
+        showProgress(getString(R.string.undo_progress, operation.label(MainActivity.this)), 0);
+        new Thread(() -> {
+            String error = null;
+            int done = 0;
+            List<StorageOperationRecord> records = new ArrayList<>(operation.storageRecords);
+            Collections.reverse(records);
+            List<FileEntry> progressEntries = new ArrayList<>();
+            for (StorageOperationRecord record : records) {
+                if (record.sourceBackup != null) {
+                    progressEntries.add(new FileEntry(record.sourceBackup, null));
+                } else if (record.destination != null) {
+                    progressEntries.add(record.destination);
+                }
+            }
+            ProgressCounter counter = new ProgressCounter(progressEntries);
+            counter.publish(true);
+
+            for (StorageOperationRecord record : records) {
+                try {
+                    if (storageEntryExists(record.destination)) {
+                        deleteStorageEntry(record.destination);
+                    }
+                    if (record.sourceBackup != null) {
+                        restoreStorageBackup(record.sourceBackup, record.originalParent,
+                                record.originalName, counter);
+                    }
+                    if (record.replacedBackup != null) {
+                        restoreStorageBackup(record.replacedBackup, record.targetParent,
+                                record.destinationName, counter);
+                    }
+                    counter.itemDone();
+                    done++;
+                } catch (IOException exception) {
+                    error = exception.getMessage();
+                    break;
+                }
+            }
+
+            int finalDone = done;
+            String finalError = error;
+            runOnUiThread(() -> {
+                leftPane.ensureDocumentDirectoryReadable();
+                rightPane.ensureDocumentDirectoryReadable();
                 leftPane.reloadTreeKeepingExpansion();
                 rightPane.reloadTreeKeepingExpansion();
                 leftPane.refreshFiles();
@@ -1159,6 +2029,17 @@ public class MainActivity extends Activity {
     }
 
     private void openExternal(FileEntry entry) {
+        if (entry.isApkPackage()) {
+            openApkPackage(entry);
+            return;
+        }
+        if (isImageEntry(entry)) {
+            List<FileEntry> entries = activePane == null
+                    ? Collections.singletonList(entry)
+                    : activePane.visibleEntries;
+            openImageViewer(entry, entries);
+            return;
+        }
         try {
             Uri uri = entry.openUri();
             Intent intent = new Intent(Intent.ACTION_VIEW);
@@ -1170,7 +2051,256 @@ public class MainActivity extends Activity {
         }
     }
 
+    private boolean isImageEntry(FileEntry entry) {
+        return entry != null && !entry.isDirectoryLike() && entry.mimeType().startsWith("image/");
+    }
+
+    private void openImageViewer(FileEntry selected, List<FileEntry> folderEntries) {
+        List<FileEntry> images = new ArrayList<>();
+        for (FileEntry entry : folderEntries) {
+            if (isImageEntry(entry)) {
+                images.add(entry);
+            }
+        }
+        int selectedIndex = -1;
+        for (int index = 0; index < images.size(); index++) {
+            if (images.get(index).key().equals(selected.key())) {
+                selectedIndex = index;
+                break;
+            }
+        }
+        if (selectedIndex < 0) {
+            images.add(selected);
+            selectedIndex = images.size() - 1;
+        }
+        new ImageViewerDialog(images, selectedIndex).show();
+    }
+
+    private final class ImageViewerDialog extends Dialog {
+        private final List<FileEntry> images;
+        private final ImageView imageView;
+        private final TextView titleView;
+        private final TextView pageView;
+        private final TextView errorView;
+        private int index;
+        private int loadGeneration;
+        private Bitmap displayedBitmap;
+
+        ImageViewerDialog(List<FileEntry> images, int index) {
+            super(MainActivity.this, android.R.style.Theme_Material_NoActionBar_Fullscreen);
+            this.images = new ArrayList<>(images);
+            this.index = index;
+
+            FrameLayout root = new FrameLayout(MainActivity.this);
+            root.setBackgroundColor(Color.BLACK);
+            root.setContentDescription("ImageViewer");
+
+            imageView = new ImageView(MainActivity.this);
+            imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            imageView.setAdjustViewBounds(false);
+            imageView.setContentDescription("ImageViewerImage");
+            imageView.setPadding(dp(8), dp(64), dp(8), dp(20));
+            root.addView(imageView, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+            errorView = new TextView(MainActivity.this);
+            errorView.setTextColor(Color.WHITE);
+            errorView.setTextSize(16);
+            errorView.setGravity(Gravity.CENTER);
+            errorView.setVisibility(View.GONE);
+            errorView.setContentDescription("ImageViewerError");
+            root.addView(errorView, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+            View gestureLayer = new View(MainActivity.this);
+            gestureLayer.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            root.addView(gestureLayer, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+            LinearLayout header = new LinearLayout(MainActivity.this);
+            header.setOrientation(LinearLayout.HORIZONTAL);
+            header.setGravity(Gravity.CENTER_VERTICAL);
+            header.setPadding(dp(8), dp(4), dp(12), dp(4));
+            header.setBackgroundColor(Color.argb(210, 20, 20, 20));
+
+            Button close = new Button(MainActivity.this);
+            close.setText("\u2715");
+            close.setTextColor(Color.WHITE);
+            close.setTextSize(22);
+            close.setBackgroundColor(Color.TRANSPARENT);
+            close.setContentDescription("ImageViewerClose");
+            close.setOnClickListener(view -> dismiss());
+            header.addView(close, new LinearLayout.LayoutParams(dp(56), dp(56)));
+
+            titleView = new TextView(MainActivity.this);
+            titleView.setTextColor(Color.WHITE);
+            titleView.setTextSize(15);
+            titleView.setSingleLine(true);
+            titleView.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+            titleView.setContentDescription("ImageViewerTitle");
+            header.addView(titleView, new LinearLayout.LayoutParams(0, dp(56), 1f));
+
+            pageView = new TextView(MainActivity.this);
+            pageView.setTextColor(Color.WHITE);
+            pageView.setTextSize(14);
+            pageView.setGravity(Gravity.CENTER);
+            pageView.setContentDescription("ImageViewerPage");
+            header.addView(pageView, new LinearLayout.LayoutParams(dp(64), dp(56)));
+
+            FrameLayout.LayoutParams headerParams = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP);
+            root.addView(header, headerParams);
+
+            gestureLayer.setOnTouchListener(new View.OnTouchListener() {
+                private float downX;
+                private float downY;
+
+                @Override
+                public boolean onTouch(View view, MotionEvent event) {
+                    if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                        downX = event.getX();
+                        downY = event.getY();
+                        return true;
+                    }
+                    if (event.getActionMasked() == MotionEvent.ACTION_UP) {
+                        float distanceX = event.getX() - downX;
+                        float distanceY = event.getY() - downY;
+                        if (Math.abs(distanceX) >= dp(48)
+                                && Math.abs(distanceX) > Math.abs(distanceY)) {
+                            showIndex(ImageViewerDialog.this.index + (distanceX < 0 ? 1 : -1));
+                        }
+                        return true;
+                    }
+                    return event.getActionMasked() == MotionEvent.ACTION_MOVE;
+                }
+            });
+            setContentView(root);
+            setOnDismissListener(dialog -> clearBitmap());
+        }
+
+        @Override
+        public void show() {
+            super.show();
+            Window window = getWindow();
+            if (window != null) {
+                window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+                window.setStatusBarColor(Color.BLACK);
+                window.setNavigationBarColor(Color.BLACK);
+            }
+            showIndex(index);
+        }
+
+        private void showIndex(int requestedIndex) {
+            if (requestedIndex < 0 || requestedIndex >= images.size() || requestedIndex == index && displayedBitmap != null) {
+                return;
+            }
+            index = requestedIndex;
+            FileEntry entry = images.get(index);
+            titleView.setText(entry.name());
+            pageView.setText((index + 1) + " / " + images.size());
+            imageView.setContentDescription("ImageViewerImage " + entry.name());
+            imageView.setImageDrawable(null);
+            errorView.setVisibility(View.GONE);
+            int generation = ++loadGeneration;
+            new Thread(() -> {
+                Bitmap bitmap = decodeViewerBitmap(entry);
+                runOnUiThread(() -> {
+                    if (!isShowing() || generation != loadGeneration) {
+                        if (bitmap != null) bitmap.recycle();
+                        return;
+                    }
+                    clearBitmap();
+                    displayedBitmap = bitmap;
+                    if (bitmap == null) {
+                        errorView.setText(getString(R.string.cannot_open_file));
+                        errorView.setVisibility(View.VISIBLE);
+                    } else {
+                        imageView.setImageBitmap(bitmap);
+                    }
+                });
+            }, "image-viewer-loader").start();
+        }
+
+        private Bitmap decodeViewerBitmap(FileEntry entry) {
+            int width = Math.max(1, getResources().getDisplayMetrics().widthPixels * 2);
+            int height = Math.max(1, getResources().getDisplayMetrics().heightPixels * 2);
+            try {
+                BitmapFactory.Options bounds = new BitmapFactory.Options();
+                bounds.inJustDecodeBounds = true;
+                try (InputStream input = getContentResolver().openInputStream(entry.openUri())) {
+                    BitmapFactory.decodeStream(input, null, bounds);
+                }
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
+                BitmapFactory.Options options = new BitmapFactory.Options();
+                options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+                options.inSampleSize = 1;
+                while (bounds.outWidth / options.inSampleSize > width
+                        || bounds.outHeight / options.inSampleSize > height) {
+                    options.inSampleSize *= 2;
+                }
+                try (InputStream input = getContentResolver().openInputStream(entry.openUri())) {
+                    return BitmapFactory.decodeStream(input, null, options);
+                }
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+
+        private void clearBitmap() {
+            imageView.setImageDrawable(null);
+            if (displayedBitmap != null) {
+                displayedBitmap.recycle();
+                displayedBitmap = null;
+            }
+        }
+    }
+
+    private void openApkPackage(FileEntry entry) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                && !getPackageManager().canRequestPackageInstalls()) {
+            pendingPackageEntry = entry;
+            new AlertDialog.Builder(this)
+                    .setTitle(getString(R.string.apk_install_permission_title))
+                    .setMessage(getString(R.string.apk_install_permission_message, entry.name()))
+                    .setPositiveButton(getString(R.string.open_settings), (dialog, which) -> {
+                        try {
+                            Intent settingsIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                    Uri.parse("package:" + getPackageName()));
+                            startActivity(settingsIntent);
+                        } catch (Exception exception) {
+                            pendingPackageEntry = null;
+                            Toast.makeText(this, getString(R.string.apk_installer_unavailable),
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    })
+                    .setNegativeButton(getString(R.string.cancel), (dialog, which) -> pendingPackageEntry = null)
+                    .show();
+            return;
+        }
+        launchPackageInstaller(entry);
+    }
+
+    private void launchPackageInstaller(FileEntry entry) {
+        try {
+            Uri uri = entry.openUri();
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(uri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            if (intent.resolveActivity(getPackageManager()) == null) {
+                throw new IllegalStateException("No package installer available");
+            }
+            startActivity(intent);
+            updateGlobalStatus(getString(R.string.apk_installer_opened, entry.name()));
+        } catch (Exception exception) {
+            pendingPackageEntry = null;
+            Toast.makeText(this, getString(R.string.apk_installer_unavailable), Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private String mimeTypeForName(String name) {
+        if (name != null && name.toLowerCase(Locale.ROOT).endsWith(".apk")) {
+            return "application/vnd.android.package-archive";
+        }
         String extension = MimeTypeMap.getFileExtensionFromUrl(name);
         if (extension != null && !extension.isEmpty()) {
             String type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.toLowerCase(Locale.ROOT));
@@ -1190,23 +2320,107 @@ public class MainActivity extends Activity {
         };
     }
 
-    private void requestStorageAccessIfNeeded() {
+    private boolean hasUsableStorageAccess() {
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+            String saved = getPreferences(MODE_PRIVATE).getString(PREF_DOCUMENT_TREE, "");
+            return saved != null && !saved.isEmpty() && documentEntryFromTree(Uri.parse(saved)) != null;
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                new AlertDialog.Builder(this)
-                        .setTitle(getString(R.string.storage_title))
-                        .setMessage(getString(R.string.storage_message))
-                        .setPositiveButton(getString(R.string.settings), (dialog, which) -> openAllFilesSettings())
-                        .setNegativeButton(getString(R.string.later), null)
-                        .show();
-            }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
-                && checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            return Environment.isExternalStorageManager();
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return true;
+        }
+        boolean canRead = checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED;
+        boolean canWrite = Build.VERSION.SDK_INT > Build.VERSION_CODES.P
+                || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        return canRead && canWrite;
+    }
+
+    private String storageStatusMessage() {
+        if (!hasUsableStorageAccess()) {
+            return getString(R.string.storage_access_required_status);
+        }
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+            return getString(R.string.storage_android10_status);
+        }
+        return getString(R.string.ready);
+    }
+
+    private void requestStorageAccess() {
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                    | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+            startActivityForResult(intent, REQUEST_DOCUMENT_TREE);
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            openAllFilesSettings();
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
             requestPermissions(new String[]{
                     Manifest.permission.READ_EXTERNAL_STORAGE,
                     Manifest.permission.WRITE_EXTERNAL_STORAGE
             }, REQUEST_STORAGE);
+        } else {
+            requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, REQUEST_STORAGE);
         }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_STORAGE || leftPane == null || rightPane == null) {
+            return;
+        }
+        leftPane.reloadTreeKeepingExpansion();
+        rightPane.reloadTreeKeepingExpansion();
+        buildLayout();
+        refreshEverything(storageStatusMessage());
+        if (hasUsableStorageAccess()) {
+            maybeShowFirstRunHelp();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_DOCUMENT_TREE || resultCode != RESULT_OK || data == null || data.getData() == null) {
+            return;
+        }
+        Uri treeUri = data.getData();
+        try {
+            if ((data.getFlags() & Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0) {
+                getContentResolver().takePersistableUriPermission(treeUri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            } else {
+                getContentResolver().takePersistableUriPermission(treeUri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            }
+        } catch (SecurityException exception) {
+            updateGlobalStatus(getString(R.string.storage_tree_failed));
+            return;
+        }
+        FileEntry root = documentEntryFromTree(treeUri);
+        if (root == null) {
+            updateGlobalStatus(getString(R.string.storage_tree_failed));
+            return;
+        }
+        getPreferences(MODE_PRIVATE).edit().putString(PREF_DOCUMENT_TREE, treeUri.toString()).apply();
+        leftPane.setRoot(root);
+        FileEntry secondRoot = documentEntryFromTree(treeUri);
+        rightPane.setRoot(secondRoot == null ? root : secondRoot);
+        buildLayout();
+        refreshEverything(getString(R.string.storage_tree_ready));
+        maybeShowFirstRunHelp();
     }
 
     private void openAllFilesSettings() {
@@ -1342,6 +2556,32 @@ public class MainActivity extends Activity {
         }
     }
 
+    private boolean isEntryInside(FileEntry parent, FileEntry child) {
+        if (parent == null || child == null) {
+            return false;
+        }
+        FileEntry cursor = child;
+        while (cursor != null) {
+            if (parent.key().equals(cursor.key())) {
+                return true;
+            }
+            cursor = cursor.parent;
+        }
+        if (parent.documentUri != null && child.documentUri != null) {
+            try {
+                String parentId = DocumentsContract.getDocumentId(parent.documentUri);
+                String childId = DocumentsContract.getDocumentId(child.documentUri);
+                return childId.equals(parentId) || childId.startsWith(parentId + "/");
+            } catch (IllegalArgumentException ignored) {
+                return false;
+            }
+        }
+        if (parent.file != null && child.file != null) {
+            return isInside(parent.file, child.file);
+        }
+        return false;
+    }
+
     private long totalBytes(File file) {
         if (!file.isDirectory()) {
             return Math.max(1L, file.length());
@@ -1391,17 +2631,19 @@ public class MainActivity extends Activity {
         float touchDownX = 0f;
         float touchDownY = 0f;
         boolean touchDragStarted = false;
+        GestureDetector fileTapGestures;
+        boolean fileDoubleTapConsumed = false;
         long currentDirectoryBytes = -1L;
         int statsGeneration = 0;
 
-        CommanderPane(String title, File root, String accent) {
+        CommanderPane(String title, FileEntry root, String accent) {
             this.title = title;
             this.accent = accent;
             setRoot(root);
         }
 
-        void setRoot(File root) {
-            currentDirectory = new FileEntry(root, null);
+        void setRoot(FileEntry root) {
+            currentDirectory = root;
             rootNode = new TreeNode(currentDirectory, 0);
             rootNode.expanded = true;
             loadChildren(rootNode);
@@ -1427,6 +2669,10 @@ public class MainActivity extends Activity {
             pathText.setSelectAllOnFocus(true);
             pathText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
             pathText.setImeOptions(EditorInfo.IME_ACTION_GO);
+            if (currentDirectory.isDocument() || isTelevision()) {
+                pathText.setFocusable(false);
+                pathText.setCursorVisible(false);
+            }
             pathText.setOnFocusChangeListener((view, hasFocus) -> {
                 if (hasFocus) {
                     activePane = this;
@@ -1503,6 +2749,29 @@ public class MainActivity extends Activity {
             fileAdapter = new FileAdapter(this);
             fileList.setAdapter(fileAdapter);
             fileList.setItemsCanFocus(false);
+            fileTapGestures = new GestureDetector(MainActivity.this,
+                    new GestureDetector.SimpleOnGestureListener() {
+                        @Override
+                        public boolean onDown(MotionEvent event) {
+                            return true;
+                        }
+
+                        @Override
+                        public boolean onDoubleTap(MotionEvent event) {
+                            int position = fileList.pointToPosition((int) event.getX(), (int) event.getY());
+                            if (position < 0 || position >= visibleEntries.size()) return false;
+                            fileDoubleTapConsumed = true;
+                            lastClickedPosition = -1;
+                            lastClickAt = 0L;
+                            FileEntry entry = visibleEntries.get(position);
+                            if (entry.isDirectoryLike()) {
+                                openDirectory(entry);
+                            } else {
+                                openExternal(entry);
+                            }
+                            return true;
+                        }
+                    });
             fileList.setOnItemClickListener((parent, view, position, id) -> handleFileTap(position));
             fileList.setOnItemLongClickListener((parent, view, position, id) -> startFileDrag(position, view));
             fileList.setOnTouchListener((view, event) -> handleFileTouch(event));
@@ -1511,6 +2780,20 @@ public class MainActivity extends Activity {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     0,
                     1f));
+
+            TextView emptyFiles = new TextView(MainActivity.this);
+            emptyFiles.setText(hasUsableStorageAccess()
+                    ? getString(R.string.folder_empty)
+                    : getString(R.string.storage_empty));
+            emptyFiles.setTextColor(color(theme.secondaryText));
+            emptyFiles.setTextSize(13);
+            emptyFiles.setGravity(Gravity.CENTER);
+            emptyFiles.setPadding(dp(16), dp(16), dp(16), dp(16));
+            fileColumn.addView(emptyFiles, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    0,
+                    1f));
+            fileList.setEmptyView(emptyFiles);
 
             LinearLayout.LayoutParams treeParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.42f);
             LinearLayout.LayoutParams fileParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.58f);
@@ -1555,6 +2838,11 @@ public class MainActivity extends Activity {
         }
 
         private boolean handleFileTouch(MotionEvent event) {
+            fileDoubleTapConsumed = false;
+            if (fileTapGestures != null) {
+                fileTapGestures.onTouchEvent(event);
+                if (fileDoubleTapConsumed) return true;
+            }
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     touchDragPosition = fileList.pointToPosition((int) event.getX(), (int) event.getY());
@@ -1690,6 +2978,8 @@ public class MainActivity extends Activity {
 
         private void openDirectory(FileEntry directory) {
             activePane = this;
+            lastClickedPosition = -1;
+            lastClickAt = 0L;
             currentDirectory = directory;
             ensureTreePathVisible(rootNode, directory);
             rebuildTree();
@@ -1751,7 +3041,7 @@ public class MainActivity extends Activity {
                 return;
             }
             activePane = this;
-            setRoot(target);
+            setRoot(new FileEntry(target, null));
             refreshFiles();
             rebuildTree();
             updateGlobalStatus(getString(R.string.folder_opened));
@@ -1825,9 +3115,58 @@ public class MainActivity extends Activity {
             rebuildTree();
         }
 
+        private void rebaseAfterRename(File source, File destination) {
+            currentDirectory = rebaseEntryAfterRename(currentDirectory, source, destination);
+            FileEntry rootEntry = rebaseEntryAfterRename(rootNode.entry, source, destination);
+            if (rootEntry != rootNode.entry) {
+                rootNode = new TreeNode(rootEntry, 0);
+                rootNode.expanded = true;
+                loadChildren(rootNode);
+            }
+        }
+
+        private void ensureDocumentDirectoryReadable() {
+            if (!currentDirectory.isDocument()) {
+                return;
+            }
+            FileEntry refreshed = queryDocumentEntry(currentDirectory.documentUri, currentDirectory.parent);
+            if (refreshed != null) {
+                currentDirectory = refreshed;
+                return;
+            }
+            currentDirectory = rootNode.entry;
+        }
+
+        private FileEntry rebaseEntryAfterRename(FileEntry entry, File source, File destination) {
+            if (entry.file == null) {
+                return entry;
+            }
+            if (!isInside(source, entry.file)) {
+                return entry;
+            }
+            String sourcePath;
+            String entryPath;
+            try {
+                sourcePath = source.getCanonicalPath();
+                entryPath = entry.file.getCanonicalPath();
+            } catch (IOException exception) {
+                sourcePath = source.getAbsolutePath();
+                entryPath = entry.file.getAbsolutePath();
+            }
+            File rebasedFile = destination;
+            if (!entryPath.equals(sourcePath)) {
+                String relative = entryPath.substring(sourcePath.length() + 1);
+                rebasedFile = new File(destination, relative);
+            }
+            if (entry.zipPath != null) {
+                return new FileEntry(rebasedFile, null, entry.zipPath, entry.zipDirectory, entry.zipSize, entry.zipModified);
+            }
+            return new FileEntry(rebasedFile, null);
+        }
+
         private TreeNode rebuildNode(FileEntry entry, int depth, Set<String> expanded) {
             TreeNode node = new TreeNode(entry, depth);
-            node.expanded = depth == 0 || expanded.contains(entry.key()) || currentDirectory.key().startsWith(entry.key());
+            node.expanded = depth == 0 || expanded.contains(entry.key()) || isEntryInside(entry, currentDirectory);
             loadChildren(node);
             return node;
         }
@@ -1837,7 +3176,7 @@ public class MainActivity extends Activity {
                 node.expanded = true;
                 return true;
             }
-            if (!target.key().startsWith(node.entry.key())) {
+            if (!isEntryInside(node.entry, target)) {
                 return false;
             }
             if (!node.loaded) {
@@ -1886,6 +3225,12 @@ public class MainActivity extends Activity {
 
     private final class FileEntry {
         final File file;
+        final Uri documentUri;
+        final String documentName;
+        final String documentMime;
+        final int documentFlags;
+        final long documentSize;
+        final long documentModified;
         final FileEntry parent;
         final String zipPath;
         final boolean zipDirectory;
@@ -1898,6 +3243,45 @@ public class MainActivity extends Activity {
 
         FileEntry(File file, FileEntry parent, String zipPath, boolean zipDirectory, long zipSize, long zipModified) {
             this.file = file;
+            this.documentUri = null;
+            this.documentName = null;
+            this.documentMime = null;
+            this.documentFlags = 0;
+            this.documentSize = 0L;
+            this.documentModified = 0L;
+            this.parent = parent;
+            this.zipPath = zipPath;
+            this.zipDirectory = zipDirectory;
+            this.zipSize = zipSize;
+            this.zipModified = zipModified;
+        }
+
+        FileEntry(Uri documentUri, FileEntry parent, String name, String mime,
+                  long size, long modified, int flags) {
+            this.file = null;
+            this.documentUri = documentUri;
+            this.documentName = name == null || name.isEmpty() ? getString(R.string.document_root) : name;
+            this.documentMime = mime == null ? "application/octet-stream" : mime;
+            this.documentFlags = flags;
+            this.documentSize = Math.max(0L, size);
+            this.documentModified = Math.max(0L, modified);
+            this.parent = parent;
+            this.zipPath = null;
+            this.zipDirectory = false;
+            this.zipSize = 0L;
+            this.zipModified = 0L;
+        }
+
+        FileEntry(File archiveFile, Uri documentUri, FileEntry parent, String name, String mime,
+                  long size, long modified, int flags, String zipPath,
+                  boolean zipDirectory, long zipSize, long zipModified) {
+            this.file = archiveFile;
+            this.documentUri = documentUri;
+            this.documentName = name;
+            this.documentMime = mime;
+            this.documentFlags = flags;
+            this.documentSize = size;
+            this.documentModified = modified;
             this.parent = parent;
             this.zipPath = zipPath;
             this.zipDirectory = zipDirectory;
@@ -1916,6 +3300,9 @@ public class MainActivity extends Activity {
         }
 
         String physicalKey() {
+            if (documentUri != null) {
+                return documentUri.toString();
+            }
             try {
                 return file.getCanonicalPath();
             } catch (IOException exception) {
@@ -1929,12 +3316,21 @@ public class MainActivity extends Activity {
                 int slash = normalized.lastIndexOf('/');
                 return slash >= 0 ? normalized.substring(slash + 1) : normalized;
             }
+            if (documentUri != null) {
+                return documentName;
+            }
             String name = file.getName();
             return name.isEmpty() ? file.getAbsolutePath() : name;
         }
 
         String mimeType() {
-            return isDirectoryLike() ? "resource/folder" : mimeTypeForName(name());
+            if (isDirectoryLike()) {
+                return "resource/folder";
+            }
+            if (zipPath != null) {
+                return mimeTypeForName(name());
+            }
+            return documentUri != null ? documentMime : mimeTypeForName(name());
         }
 
         Uri openUri() {
@@ -1945,6 +3341,9 @@ public class MainActivity extends Activity {
                         .authority(FileContentProvider.AUTHORITY)
                         .encodedPath(Uri.encode(extracted.getAbsolutePath(), "/"))
                         .build();
+            }
+            if (documentUri != null) {
+                return documentUri;
             }
             return new Uri.Builder()
                     .scheme("content")
@@ -1958,11 +3357,19 @@ public class MainActivity extends Activity {
         }
 
         boolean isPhysicalDirectory() {
-            return zipPath == null && file.isDirectory();
+            return zipPath == null && (documentUri != null
+                    ? DocumentsContract.Document.MIME_TYPE_DIR.equals(documentMime)
+                    : file.isDirectory());
         }
 
         boolean isZipArchive() {
-            return zipPath == null && file.isFile() && file.getName().toLowerCase(Locale.ROOT).endsWith(".zip");
+            return zipPath == null && !isPhysicalDirectory() && name().toLowerCase(Locale.ROOT).endsWith(".zip");
+        }
+
+        boolean isApkPackage() {
+            return zipPath == null && !isPhysicalDirectory()
+                    && ("application/vnd.android.package-archive".equals(documentMime)
+                    || name().toLowerCase(Locale.ROOT).endsWith(".apk"));
         }
 
         boolean isZipEntry() {
@@ -1970,30 +3377,64 @@ public class MainActivity extends Activity {
         }
 
         boolean isDirectoryLike() {
-            return file.isDirectory() || isZipArchive() || (zipPath != null && zipDirectory);
+            return isPhysicalDirectory() || isZipArchive() || (zipPath != null && zipDirectory);
+        }
+
+        boolean isDocument() {
+            return documentUri != null;
+        }
+
+        boolean canWriteDirectory() {
+            if (!isPhysicalDirectory()) {
+                return false;
+            }
+            if (documentUri == null) {
+                return file.canWrite();
+            }
+            return (documentFlags & DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE) != 0;
         }
 
         String displayPath() {
             if (zipPath != null) {
-                return file.getAbsolutePath() + "!/" + zipPath;
+                return (documentUri != null ? documentName : file.getAbsolutePath()) + "!/" + zipPath;
             }
             if (isZipArchive()) {
-                return file.getAbsolutePath() + "!/";
+                return (documentUri != null ? documentName : file.getAbsolutePath()) + "!/";
+            }
+            if (documentUri != null) {
+                List<String> names = new ArrayList<>();
+                FileEntry current = this;
+                while (current != null && current.documentUri != null) {
+                    names.add(current.name());
+                    current = current.parent;
+                }
+                Collections.reverse(names);
+                return String.join(" / ", names);
             }
             return file.getAbsolutePath();
         }
 
         long size() {
-            return zipPath != null ? zipSize : file.length();
+            return zipPath != null ? zipSize : (documentUri != null ? documentSize : file.length());
         }
 
         long modified() {
-            return zipPath != null ? zipModified : file.lastModified();
+            return zipPath != null ? zipModified : (documentUri != null ? documentModified : file.lastModified());
         }
 
         long contentBytes() {
             if (isZipArchive() || isZipEntry()) {
                 return zipContentBytes();
+            }
+            if (documentUri != null) {
+                if (!isPhysicalDirectory()) {
+                    return Math.max(1L, documentSize);
+                }
+                long total = 0L;
+                for (FileEntry child : children(false)) {
+                    total += child.contentBytes();
+                }
+                return Math.max(1L, total);
             }
             return totalBytes(file);
         }
@@ -2001,6 +3442,9 @@ public class MainActivity extends Activity {
         List<FileEntry> children(boolean directoriesOnly) {
             if (isZipArchive() || isZipEntry()) {
                 return zipChildren(directoriesOnly);
+            }
+            if (documentUri != null) {
+                return documentChildren(directoriesOnly);
             }
             File[] files = file.listFiles();
             if (files == null) {
@@ -2021,6 +3465,60 @@ public class MainActivity extends Activity {
             return entries;
         }
 
+        private List<FileEntry> documentChildren(boolean directoriesOnly) {
+            if (!isPhysicalDirectory()) {
+                return Collections.emptyList();
+            }
+            List<FileEntry> entries = new ArrayList<>();
+            String[] projection = {
+                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    DocumentsContract.Document.COLUMN_MIME_TYPE,
+                    DocumentsContract.Document.COLUMN_SIZE,
+                    DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+                    DocumentsContract.Document.COLUMN_FLAGS
+            };
+            try {
+                String documentId = DocumentsContract.getDocumentId(documentUri);
+                Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(documentUri, documentId);
+                try (Cursor cursor = getContentResolver().query(childrenUri, projection, null, null, null)) {
+                    if (cursor == null) {
+                        return Collections.emptyList();
+                    }
+                    while (cursor.moveToNext()) {
+                        String childId = cursor.getString(0);
+                        String name = cursor.getString(1);
+                        String mime = cursor.getString(2);
+                        long size = cursor.isNull(3) ? 0L : cursor.getLong(3);
+                        long modified = cursor.isNull(4) ? 0L : cursor.getLong(4);
+                        int flags = cursor.isNull(5) ? 0 : cursor.getInt(5);
+                        boolean directory = DocumentsContract.Document.MIME_TYPE_DIR.equals(mime);
+                        if (directoriesOnly && !directory && (name == null || !name.toLowerCase(Locale.ROOT).endsWith(".zip"))) {
+                            continue;
+                        }
+                        Uri childUri = DocumentsContract.buildDocumentUriUsingTree(documentUri, childId);
+                        entries.add(new FileEntry(childUri, this, name, mime, size, modified, flags));
+                    }
+                }
+            } catch (Exception ignored) {
+                return Collections.emptyList();
+            }
+            Collections.sort(entries, entryComparator());
+            return entries;
+        }
+
+        private FileEntry findChild(String childName) {
+            if (childName == null) {
+                return null;
+            }
+            for (FileEntry child : children(false)) {
+                if (childName.equalsIgnoreCase(child.name())) {
+                    return child;
+                }
+            }
+            return null;
+        }
+
         private List<FileEntry> zipChildren(boolean directoriesOnly) {
             List<FileEntry> entries = new ArrayList<>();
             String prefix = zipPath == null ? "" : zipPath;
@@ -2028,7 +3526,9 @@ public class MainActivity extends Activity {
                 prefix += "/";
             }
             Set<String> seen = new HashSet<>();
-            try (ZipFile zip = new ZipFile(file)) {
+            try {
+                File archive = archiveFile();
+                try (ZipFile zip = new ZipFile(archive)) {
                 java.util.Enumeration<? extends ZipEntry> zipEntries = zip.entries();
                 while (zipEntries.hasMoreElements()) {
                     ZipEntry zipEntry = zipEntries.nextElement();
@@ -2049,7 +3549,15 @@ public class MainActivity extends Activity {
                     if (!seen.add(childPath)) {
                         continue;
                     }
-                    entries.add(new FileEntry(file, this, childPath, directory, zipEntry.getSize(), zipEntry.getTime()));
+                    if (documentUri != null) {
+                        entries.add(new FileEntry(archive, documentUri, this, documentName, documentMime,
+                                documentSize, documentModified, documentFlags, childPath, directory,
+                                zipEntry.getSize(), zipEntry.getTime()));
+                    } else {
+                        entries.add(new FileEntry(archive, this, childPath, directory,
+                                zipEntry.getSize(), zipEntry.getTime()));
+                    }
+                }
                 }
             } catch (IOException ignored) {
                 return Collections.emptyList();
@@ -2064,7 +3572,7 @@ public class MainActivity extends Activity {
             if (!prefix.isEmpty() && !prefix.endsWith("/")) {
                 prefix += "/";
             }
-            try (ZipFile zip = new ZipFile(file)) {
+            try (ZipFile zip = new ZipFile(archiveFile())) {
                 java.util.Enumeration<? extends ZipEntry> zipEntries = zip.entries();
                 while (zipEntries.hasMoreElements()) {
                     ZipEntry zipEntry = zipEntries.nextElement();
@@ -2085,7 +3593,7 @@ public class MainActivity extends Activity {
 
         private File extractZipEntryForOpen() {
             File output = new File(getCacheDir(), "zip_open_" + SystemClock.elapsedRealtime() + "_" + name());
-            try (ZipFile zip = new ZipFile(file)) {
+            try (ZipFile zip = new ZipFile(archiveFile())) {
                 ZipEntry entry = zip.getEntry(zipPath);
                 if (entry == null || entry.isDirectory()) {
                     return output;
@@ -2103,6 +3611,41 @@ public class MainActivity extends Activity {
             }
             return output;
         }
+
+        private synchronized File archiveFile() throws IOException {
+            if (file != null) {
+                return file;
+            }
+            if (documentUri == null) {
+                throw new IOException(getString(R.string.no_readable_selection));
+            }
+            String cacheName = "saf_zip_" + Integer.toHexString(documentUri.toString().hashCode())
+                    + "_" + documentModified + "_" + documentSize + ".zip";
+            File cached = new File(getCacheDir(), cacheName);
+            if (cached.isFile() && documentModified > 0L) {
+                return cached;
+            }
+            try (InputStream input = getContentResolver().openInputStream(documentUri);
+                 OutputStream output = new FileOutputStream(cached)) {
+                if (input == null) {
+                    throw new IOException(getString(R.string.no_readable_selection));
+                }
+                byte[] buffer = new byte[1024 * 64];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    output.write(buffer, 0, read);
+                }
+            } catch (IOException | SecurityException exception) {
+                if (cached.exists()) {
+                    cached.delete();
+                }
+                if (exception instanceof IOException) {
+                    throw (IOException) exception;
+                }
+                throw new IOException(getString(R.string.no_readable_selection), exception);
+            }
+            return cached;
+        }
     }
 
     private final class ProgressCounter {
@@ -2115,7 +3658,7 @@ public class MainActivity extends Activity {
         ProgressCounter(List<FileEntry> entries) {
             long total = 0L;
             for (FileEntry entry : entries) {
-                total += totalBytes(entry.file);
+                total += entry.contentBytes();
             }
             totalBytes = Math.max(1L, total);
             totalItems = Math.max(1, entries.size());
@@ -2359,13 +3902,14 @@ public class MainActivity extends Activity {
         }
     }
 
-    private static final class LastOperation {
+    private final class LastOperation {
         final boolean move;
         final boolean zip;
         final boolean delete;
         final boolean trash;
         final File backupRoot;
         final List<OperationRecord> records = new ArrayList<>();
+        final List<StorageOperationRecord> storageRecords = new ArrayList<>();
         final long createdAt = System.currentTimeMillis();
 
         LastOperation(boolean move, File backupRoot) {
@@ -2386,15 +3930,19 @@ public class MainActivity extends Activity {
 
         String label(MainActivity activity) {
             if (zip) {
-                return activity.getString(R.string.zip_label, records.size());
+                return activity.getString(R.string.zip_label, recordCount());
             }
             if (delete) {
-                return activity.getString(R.string.delete_label, records.size());
+                return activity.getString(R.string.delete_label, recordCount());
             }
             if (trash) {
-                return activity.getString(R.string.trash_label, records.size());
+                return activity.getString(R.string.trash_label, recordCount());
             }
-            return activity.getString(move ? R.string.move_label : R.string.copy_label, records.size());
+            return activity.getString(move ? R.string.move_label : R.string.copy_label, recordCount());
+        }
+
+        int recordCount() {
+            return records.size() + storageRecords.size();
         }
     }
 
@@ -2411,6 +3959,28 @@ public class MainActivity extends Activity {
         OperationRecord(File original, File destination, File replacedBackup) {
             this.original = original;
             this.destination = destination;
+            this.replacedBackup = replacedBackup;
+        }
+    }
+
+    private final class StorageOperationRecord {
+        final FileEntry originalParent;
+        final String originalName;
+        final FileEntry targetParent;
+        final String destinationName;
+        final FileEntry destination;
+        final File sourceBackup;
+        final File replacedBackup;
+
+        StorageOperationRecord(FileEntry originalParent, String originalName,
+                               FileEntry targetParent, String destinationName,
+                               FileEntry destination, File sourceBackup, File replacedBackup) {
+            this.originalParent = originalParent;
+            this.originalName = originalName;
+            this.targetParent = targetParent;
+            this.destinationName = destinationName;
+            this.destination = destination;
+            this.sourceBackup = sourceBackup;
             this.replacedBackup = replacedBackup;
         }
     }

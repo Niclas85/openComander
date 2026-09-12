@@ -27,6 +27,22 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
     var currentDirectory: FileEntry!
     private var backHistory: [FileEntry] = []
     private var forwardHistory: [FileEntry] = []
+    private var listingGeneration = 0
+    private var listedDirectoryKey: String?
+    private var listingPending = false
+    private var expandedTreeKeys = Set<String>()
+    private var treeGeneration = 0
+#if targetEnvironment(macCatalyst)
+    private var cloudObserver: CloudDirectoryObserver?
+    private var cloudRefreshWork: DispatchWorkItem?
+#endif
+    private static let listingQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "OpenCommander.directory-listing"
+        queue.qualityOfService = .userInitiated
+        queue.maxConcurrentOperationCount = 4
+        return queue
+    }()
     
     var treeList: UITableView!
     var fileList: UITableView!
@@ -42,6 +58,13 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         super.init()
         self.setRoot(root)
     }
+
+    deinit {
+#if targetEnvironment(macCatalyst)
+        cloudObserver?.stop()
+        cloudRefreshWork?.cancel()
+#endif
+    }
     
     func setRoot(_ root: FileEntry, recordHistory: Bool = true) {
         if recordHistory, let current = currentDirectory, current.key() != root.key() {
@@ -49,6 +72,8 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
             forwardHistory.removeAll()
         }
         currentDirectory = root
+        treeGeneration += 1
+        expandedTreeKeys.removeAll()
         rootNode = TreeNode(entry: currentDirectory, depth: 0)
         rootNode.expanded = true
         loadChildren(for: rootNode)
@@ -257,6 +282,7 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
     private func showDirectory(_ directory: FileEntry) {
         currentDirectory = directory
         if !isEntryInside(rootNode.entry, directory) {
+            treeGeneration += 1
             rootNode = TreeNode(entry: directory, depth: 0)
             rootNode.expanded = true
             loadChildren(for: rootNode)
@@ -266,17 +292,131 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
     }
     
     func refreshFiles() {
-        visibleEntries.removeAll()
-        
-        visibleEntries.append(contentsOf: currentDirectory.children(directoriesOnly: false))
-        
-        let newKeys = Set(visibleEntries.map { $0.key() })
-        selectedKeys = selectedKeys.intersection(newKeys)
-        
+        let directory = currentDirectory!
+        listingGeneration += 1
+        let generation = listingGeneration
+        if listedDirectoryKey != directory.key() {
+            visibleEntries.removeAll()
+            selectedKeys.removeAll()
+        }
+        listedDirectoryKey = directory.key()
+        listingPending = true
         currentDirectoryBytes = -1
+        showDirectoryMessage(visibleEntries.isEmpty ? L10n.get("directory_loading") : nil, retry: false)
         updateSelectionStatus()
         fileList?.reloadData()
-        scanDirectorySize()
+
+#if targetEnvironment(macCatalyst)
+        observeCloudDirectory(directory.url)
+        Self.listingQueue.addOperation { [weak self] in
+            let result = Result { try directory.readChildren(directoriesOnly: false) }
+            DispatchQueue.main.async {
+                guard let self, self.listingGeneration == generation,
+                      self.currentDirectory.key() == directory.key() else { return }
+                self.finishListing(result)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+            guard let self, self.listingGeneration == generation, self.listingPending else { return }
+            self.showDirectoryMessage(L10n.get("directory_waiting"), retry: true)
+        }
+#else
+        finishListing(Result { try directory.readChildren(directoriesOnly: false) })
+#endif
+    }
+
+#if targetEnvironment(macCatalyst)
+    private func observeCloudDirectory(_ url: URL) {
+        guard cloudObserver?.presentedItemURL != url else { return }
+        cloudObserver?.stop()
+        cloudObserver = nil
+        cloudRefreshWork?.cancel()
+        guard HostFileSystem.isCloudStorage(url) else { return }
+        cloudObserver = CloudDirectoryObserver(url: url) { [weak self] in
+            DispatchQueue.main.async {
+                guard let self, self.currentDirectory.url == url else { return }
+                self.cloudRefreshWork?.cancel()
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self, self.currentDirectory.url == url,
+                          self.viewController?.operationInProgress == false else { return }
+                    self.reloadTreeKeepingExpansion()
+                    self.refreshFiles()
+                }
+                self.cloudRefreshWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+            }
+        }
+    }
+#endif
+
+    private func finishListing(_ result: Result<[FileEntry], Error>) {
+        listingPending = false
+        switch result {
+        case .success(let entries):
+            visibleEntries = entries
+            showDirectoryMessage(entries.isEmpty ? L10n.get("directory_empty") : nil, retry: false)
+        case .failure(let error):
+            // Do not leave stale rows actionable after a failed refresh.
+            visibleEntries.removeAll()
+            currentDirectoryBytes = -2
+#if targetEnvironment(macCatalyst)
+            let message = String(format: L10n.get("directory_error"), error.localizedDescription)
+#else
+            let message = L10n.get("storage_tree_failed") + "\n" + error.localizedDescription + "\n\n" + L10n.get("help_access_ios")
+#endif
+            showDirectoryMessage(message, retry: true)
+        }
+        let newKeys = Set(visibleEntries.map { $0.key() })
+        selectedKeys = selectedKeys.intersection(newKeys)
+        updateSelectionStatus()
+        fileList?.reloadData()
+        if case .success = result { scanDirectorySize() }
+    }
+
+    private func showDirectoryMessage(_ message: String?, retry: Bool) {
+        guard let message else { fileList?.backgroundView = nil; return }
+        let container = UIView()
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.spacing = 12
+        stack.alignment = .center
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+        let label = UILabel()
+        label.text = message
+        label.numberOfLines = 0
+        label.textAlignment = .center
+        label.font = .systemFont(ofSize: 13)
+        label.textColor = viewController?.theme.secondaryText
+        label.accessibilityIdentifier = "DirectoryMessage-\(title)"
+        stack.addArrangedSubview(label)
+        if retry {
+            let button = UIButton(type: .system)
+            button.setTitle(L10n.get("directory_retry"), for: .normal)
+            button.accessibilityIdentifier = "DirectoryRetry-\(title)"
+            button.addAction(UIAction { [weak self] _ in
+                self?.reloadTreeKeepingExpansion()
+                self?.refreshFiles()
+            }, for: .touchUpInside)
+            stack.addArrangedSubview(button)
+#if !targetEnvironment(macCatalyst)
+            let chooseButton = UIButton(type: .system)
+            chooseButton.setTitle(L10n.get("choose_another_folder"), for: .normal)
+            chooseButton.accessibilityIdentifier = "DirectoryChooseFolder-\(title)"
+            chooseButton.addAction(UIAction { [weak self] _ in
+                guard let self else { return }
+                self.viewController?.activePane = self
+                self.viewController?.showComputerLocations()
+            }, for: .touchUpInside)
+            stack.addArrangedSubview(chooseButton)
+#endif
+        }
+        NSLayoutConstraint.activate([
+            stack.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12)
+        ])
+        fileList?.backgroundView = container
     }
     
     func rebuildTree() {
@@ -286,7 +426,9 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
     }
 
     func reloadTreeKeepingExpansion() {
+        treeGeneration += 1
         let expandedKeys = Set(flatTree.filter { $0.expanded }.map { $0.entry.key() })
+        expandedTreeKeys = expandedKeys
         rootNode = rebuildNode(entry: rootNode.entry, depth: 0, expandedKeys: expandedKeys)
         _ = ensureTreePathVisible(rootNode, target: currentDirectory)
         rebuildTree()
@@ -315,6 +457,7 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
 
     private func scanDirectorySize() {
         let directory = currentDirectory!
+        let generation = listingGeneration
 #if targetEnvironment(macCatalyst)
         let directoryPath = directory.url.standardizedFileURL.path
         let homePath = HostFileSystem.homeDirectory.standardizedFileURL.path
@@ -322,7 +465,8 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
             includingResourceValuesForKeys: nil,
             options: [.skipHiddenVolumes]
         ) ?? []).map { $0.standardizedFileURL.path })
-        if directoryPath == "/" || directoryPath == homePath || volumePaths.contains(directoryPath) {
+        if directoryPath == "/" || directoryPath == homePath || volumePaths.contains(directoryPath) ||
+            HostFileSystem.isCloudStorage(directory.url) {
             currentDirectoryBytes = -2
             updateSelectionStatus()
             return
@@ -331,7 +475,7 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         DispatchQueue.global(qos: .utility).async {
             let bytes = directory.contentBytes()
             DispatchQueue.main.async {
-                guard self.currentDirectory.key() == directory.key() else { return }
+                guard self.listingGeneration == generation, self.currentDirectory.key() == directory.key() else { return }
                 self.currentDirectoryBytes = bytes
                 self.updateSelectionStatus()
             }
@@ -385,18 +529,40 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
     }
     
     private func loadChildren(for node: TreeNode) {
+#if targetEnvironment(macCatalyst)
+        // Mark this attempt before rebuilding to avoid duplicate provider requests.
+        // A refresh creates new nodes, so failures and empty startup listings retry.
+        node.loaded = true
+        let generation = treeGeneration
+        Self.listingQueue.addOperation { [weak self, weak node] in
+            guard let node else { return }
+            let entries = (try? node.entry.readChildren(directoriesOnly: true)) ?? []
+            DispatchQueue.main.async {
+                guard let self, self.treeGeneration == generation else { return }
+                node.children = entries.map {
+                    let child = TreeNode(entry: $0, depth: node.depth + 1)
+                    child.expanded = self.expandedTreeKeys.contains($0.key())
+                    return child
+                }
+                // Expand the current path once provider metadata has arrived.
+                _ = self.ensureTreePathVisible(self.rootNode, target: self.currentDirectory)
+                self.rebuildTree()
+            }
+        }
+#else
         node.children.removeAll()
         for entry in node.entry.children(directoriesOnly: true) {
             let child = TreeNode(entry: entry, depth: node.depth + 1)
             node.children.append(child)
         }
         node.loaded = true
+#endif
     }
     
     func updateSelectionStatus() {
         guard let selectionText = selectionText, let pathText = pathText else { return }
         let sizeStr = currentDirectoryBytes >= 0 ? "\(currentDirectoryBytes) B" : (currentDirectoryBytes == -2 ? "—" : "...")
-        selectionText.text = "\(selectedKeys.count)/\(visibleEntries.count) | \(sizeStr)"
+        selectionText.text = listingPending ? L10n.get("directory_loading") : "\(selectedKeys.count)/\(visibleEntries.count) | \(sizeStr)"
         // A background size scan must not overwrite a path being typed.
         if !pathText.isFirstResponder { pathText.text = currentDirectory.displayPath() }
     }
@@ -479,13 +645,44 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
               indexPath.row < visibleEntries.count else { return }
         let entry = visibleEntries[indexPath.row]
         viewController?.activePane = self
-        if entry.isDirectoryLike() {
+        if entry.opensInPaneByDefault() {
             openDirectory(entry)
         } else {
             viewController?.openExternal(entry)
         }
     }
 }
+
+#if targetEnvironment(macCatalyst)
+extension CommanderPane {
+    func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath,
+                   point: CGPoint) -> UIContextMenuConfiguration? {
+        let entry = tableView === treeList ? flatTree[indexPath.row].entry : visibleEntries[indexPath.row]
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+            guard let self, let controller = self.viewController else { return nil }
+            var actions: [UIAction] = [
+                UIAction(title: L10n.get("open"), image: UIImage(systemName: "arrow.up.forward.app")) { _ in
+                    controller.activePane = self
+                    if entry.opensInPaneByDefault() { self.openDirectory(entry) }
+                    else { controller.openExternal(entry) }
+                },
+                UIAction(title: L10n.get("open_with"), image: UIImage(systemName: "app")) { _ in
+                    controller.openDesktopFile(entry, chooseApplication: true)
+                },
+                UIAction(title: L10n.get("preview"), image: UIImage(systemName: "eye")) { _ in
+                    controller.previewFile(entry)
+                }
+            ]
+            if entry.isDirectoryLike() {
+                actions.append(UIAction(title: L10n.get("browse_contents"), image: UIImage(systemName: "folder")) { _ in
+                    self.openDirectory(entry)
+                })
+            }
+            return UIMenu(children: actions)
+        }
+    }
+}
+#endif
 
 import UIKit
 import UniformTypeIdentifiers

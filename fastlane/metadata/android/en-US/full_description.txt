@@ -14,12 +14,16 @@ Key features:
 - Progress with percent, item count and bytes
 - Browse ZIP archives like folders
 - Create ZIP archives from selected files and folders
+- Open existing APK files in Android’s package installer
+- Available for Android TV with remote-control navigation
 - File type icons for images, videos, music, PDF, Office files, archives and more
 - Light and dark theme
 - Multilingual interface
 - No ads, no tracking, no account
 
 OpenCommander works locally on your device. It does not upload files to provider servers and does not use analytics SDKs. File access is required only so the file manager can show, open, copy, move and archive files.
+
+APK installation is initiated only when the user deliberately double-taps an existing APK file. OpenCommander does not download APK files or install anything automatically. Android displays its own confirmation before every installation.
 
 Open source:
 

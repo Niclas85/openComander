@@ -1,8 +1,6 @@
-OpenCommander 1.0
+OpenCommander 1.3
 
-- Zwei-Seiten-Dateimanager fuer Android
-- Kopieren und Verschieben per Drag & Drop
-- ZIP-Dateien wie Ordner durchsuchen
-- ZIP-Archive aus markierten Dateien erstellen
-- Rueckgaengig mit Historie
-- Keine Werbung, kein Tracking, kein Konto
+- APK-Dateien sicher im Android-Paketinstaller öffnen
+- Unterstützung für Android TV und Fernbedienungen
+- Android-10-Ordnerzugriff verbessert
+- Umbenennen, ZIP und Rückgängig erweitert

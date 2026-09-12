@@ -24,7 +24,11 @@ public class FileContentProvider extends ContentProvider {
     @Override
     public String getType(Uri uri) {
         try {
-            String type = URLConnection.guessContentTypeFromName(safeFileFromUri(uri).getName());
+            String name = safeFileFromUri(uri).getName();
+            if (name.toLowerCase(java.util.Locale.ROOT).endsWith(".apk")) {
+                return "application/vnd.android.package-archive";
+            }
+            String type = URLConnection.guessContentTypeFromName(name);
             return type == null ? "application/octet-stream" : type;
         } catch (FileNotFoundException exception) {
             return "application/octet-stream";

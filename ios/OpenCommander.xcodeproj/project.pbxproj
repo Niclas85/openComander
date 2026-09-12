@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        A66000000000000000000001 = {isa = PBXBuildFile; fileRef = A66000000000000000000011; };
+        A66000000000000000000002 = {isa = PBXBuildFile; fileRef = A66000000000000000000011; };
+        A66000000000000000000003 = {isa = PBXBuildFile; fileRef = A66000000000000000000012; };
+        A66000000000000000000004 = {isa = PBXBuildFile; fileRef = A66000000000000000000013; platformFilter = maccatalyst; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy); }; };
+        IMG000000000000000000001 /* ImagePreviewLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = IMG000000000000000000002 /* ImagePreviewLoader.swift */; };
 		DAD000000000000000000001 /* FileDropTransfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAD000000000000000000002 /* FileDropTransfer.swift */; };
 		C0DE00000000000000000001 /* NTFS3GVolume.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000011 /* NTFS3GVolume.swift */; };
 		C0DE00000000000000000002 /* NTFS3GBridge.c in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000012 /* NTFS3GBridge.c */; };
@@ -43,6 +48,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+        A66000000000000000000020 = {isa = PBXContainerItemProxy; containerPortal = B40AE4368478278C4D234276; proxyType = 1; remoteGlobalIDString = A66000000000000000000030; remoteInfo = OpenCommanderMacBridge; };
 		48576129C6CA407C05C96F75 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = B40AE4368478278C4D234276 /* Project object */;
@@ -60,6 +66,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+        A66000000000000000000021 = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (A66000000000000000000004); name = "Embed Desktop Bridge"; runOnlyForDeploymentPostprocessing = 0; };
 		500F0F4397A51D91361E950E /* Embed ExtensionKit Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -74,6 +81,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        A66000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopBridgeProtocol.swift; sourceTree = "<group>"; };
+        A66000000000000000000012 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCommanderMacBridge/DesktopBridge.swift; sourceTree = SOURCE_ROOT; };
+        A66000000000000000000013 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = OpenCommanderMacBridge.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+        IMG000000000000000000002 /* ImagePreviewLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreviewLoader.swift; sourceTree = "<group>"; };
 		DAD000000000000000000002 /* FileDropTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDropTransfer.swift; sourceTree = "<group>"; };
 		C0DE00000000000000000011 /* NTFS3GVolume.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NTFS3GVolume.swift; sourceTree = "<group>"; };
 		C0DE00000000000000000012 /* NTFS3GBridge.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = NTFS3GBridge.c; sourceTree = "<group>"; };
@@ -147,9 +158,12 @@
 			isa = PBXGroup;
 			children = (
 				4446BB5DED9CF5F765ACB678 /* AppDelegate.swift */,
+                A66000000000000000000011,
+                A66000000000000000000012,
 				4CADCE370033D94E97C19D6C /* Assets.xcassets */,
 				556918D3DC87DF614F200378 /* FileEntry.swift */,
 				DAD000000000000000000002 /* FileDropTransfer.swift */,
+                IMG000000000000000000002 /* ImagePreviewLoader.swift */,
 				177BF22CC72C73144BF8A901 /* Localization-ar.json */,
 				E5C5B68809E3A9A3AA0D48DC /* Localization-hi.json */,
 				6816D7D810D1AC773BCDAF80 /* Localization-id.json */,
@@ -218,6 +232,7 @@
 			isa = PBXGroup;
 			children = (
 				E1DBBB265AA7750A08DA0F19 /* OpenCommander.app */,
+                A66000000000000000000013,
 				83A833B5F153635B4ADB8FDC /* OpenCommanderNTFSModule.appex */,
 				5B94884FA6967AD7E1E7AF17 /* OpenCommanderUITests.xctest */,
 			);
@@ -227,6 +242,7 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+        A66000000000000000000030 = {isa = PBXNativeTarget; buildConfigurationList = A66000000000000000000040; buildPhases = (A66000000000000000000031); buildRules = (); dependencies = (); name = OpenCommanderMacBridge; productName = OpenCommanderMacBridge; productReference = A66000000000000000000013; productType = "com.apple.product-type.bundle"; };
 		535682510FAF9394ABA0A62B /* OpenCommanderNTFSModule */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 40904C5085FFC52BAFF76586 /* Build configuration list for PBXNativeTarget "OpenCommanderNTFSModule" */;
@@ -273,11 +289,13 @@
 				AE61A00DE1C9FF2C2478036D /* Resources */,
 				65487D88ADE12A608EDA02F3 /* Frameworks */,
 				500F0F4397A51D91361E950E /* Embed ExtensionKit Extensions */,
+                A66000000000000000000021,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				CE8573530714CA241606170A /* PBXTargetDependency */,
+                A66000000000000000000022,
 			);
 			name = OpenCommander;
 			packageProductDependencies = (
@@ -327,7 +345,8 @@
 			productRefGroup = FA3E43236442B00C5DA066E6 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (
+				targets = (
+                A66000000000000000000030,
 				AA5F057D168538E2680754BB /* OpenCommander */,
 				535682510FAF9394ABA0A62B /* OpenCommanderNTFSModule */,
 				85A7DC1B671D3EF0DAF918E7 /* OpenCommanderUITests */,
@@ -375,6 +394,7 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+        A66000000000000000000031 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A66000000000000000000002, A66000000000000000000003); runOnlyForDeploymentPostprocessing = 0; };
 		2D748C0EB7CAA662C857EF35 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -402,6 +422,8 @@
 				D78142BF3E7FB6427ADC9A63 /* AppDelegate.swift in Sources */,
 				510EFA53657E909B5C734B36 /* FileEntry.swift in Sources */,
 				DAD000000000000000000001 /* FileDropTransfer.swift in Sources */,
+                A66000000000000000000001,
+                IMG000000000000000000001 /* ImagePreviewLoader.swift in Sources */,
 				4A64E77E26EC97CD38490ED8 /* Localization.swift in Sources */,
 				8BC681367A8954F0784955B7 /* MacFileSystem.swift in Sources */,
 				97349B0FB0B561EFF33A37DC /* Pane.swift in Sources */,
@@ -412,6 +434,7 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+        A66000000000000000000022 = {isa = PBXTargetDependency; platformFilter = maccatalyst; target = A66000000000000000000030; targetProxy = A66000000000000000000020; };
 		C585D13E4F63063F7ECFEF27 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = AA5F057D168538E2680754BB /* OpenCommander */;
@@ -426,6 +449,8 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+        A66000000000000000000041 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = WB497999XX; SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 13.0; SWIFT_VERSION = 5.0; PRODUCT_NAME = "$(TARGET_NAME)"; PRODUCT_BUNDLE_IDENTIFIER = com.github.niklaus85.OpenCommander.MacBridge; INFOPLIST_FILE = OpenCommanderMacBridge/Info.plist; SKIP_INSTALL = YES; GENERATE_INFOPLIST_FILE = NO; }; name = Debug; };
+        A66000000000000000000042 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = WB497999XX; SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 13.0; SWIFT_VERSION = 5.0; PRODUCT_NAME = "$(TARGET_NAME)"; PRODUCT_BUNDLE_IDENTIFIER = com.github.niklaus85.OpenCommander.MacBridge; INFOPLIST_FILE = OpenCommanderMacBridge/Info.plist; SKIP_INSTALL = YES; GENERATE_INFOPLIST_FILE = NO; }; name = Release; };
 		16FE8EDE0A29A17323C2ABB6 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = C0DE00000000000000000014 /* NTFS3G.xcconfig */;
@@ -695,6 +720,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+        A66000000000000000000040 = {isa = XCConfigurationList; buildConfigurations = (A66000000000000000000041, A66000000000000000000042); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		40904C5085FFC52BAFF76586 /* Build configuration list for PBXNativeTarget "OpenCommanderNTFSModule" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

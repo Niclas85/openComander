@@ -1,6 +1,6 @@
 import Foundation
 
-#if targetEnvironment(macCatalyst)
+#if targetEnvironment(macCatalyst) || os(macOS)
 import Darwin
 #endif
 
@@ -15,6 +15,7 @@ enum HostFileSystem {
         let name: String
         let url: URL
         let kind: StorageKind
+        var isLocalArchive: Bool = false
     }
 
     enum FullDiskAccessStatus: Equatable {
@@ -24,7 +25,7 @@ enum HostFileSystem {
     }
 
     static var homeDirectory: URL {
-#if targetEnvironment(macCatalyst)
+#if targetEnvironment(macCatalyst) || os(macOS)
         if let passwordEntry = getpwuid(getuid()),
            let home = passwordEntry.pointee.pw_dir {
             return URL(fileURLWithPath: String(cString: home), isDirectory: true)
@@ -89,23 +90,9 @@ enum HostFileSystem {
             append(volume, name: values?.volumeName, kind: kind)
         }
 
-        let cloudRoot = homeDirectory.appendingPathComponent("Library/CloudStorage", isDirectory: true)
-        let cloudProviders = (try? fm.contentsOfDirectory(
-            at: cloudRoot,
-            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
-            options: [.skipsHiddenFiles]
-        )) ?? []
-        for provider in cloudProviders {
-            let values = try? provider.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
-            guard values?.isDirectory == true || values?.isSymbolicLink == true else { continue }
-            append(provider, name: cloudDisplayName(provider.lastPathComponent), kind: .cloudStorage)
-        }
-
-        let iCloudDrive = homeDirectory.appendingPathComponent(
-            "Library/Mobile Documents/com~apple~CloudDocs",
-            isDirectory: true
-        )
-        append(iCloudDrive, name: "iCloud Drive", kind: .cloudStorage)
+        result.append(contentsOf: cloudStorageLocations(in: homeDirectory).filter {
+            addedPaths.insert($0.url.standardizedFileURL.path).inserted
+        })
 
         let order: (StorageKind) -> Int = {
             switch $0 {
@@ -118,11 +105,105 @@ enum HostFileSystem {
             let leftOrder = order($0.kind)
             let rightOrder = order($1.kind)
             if leftOrder != rightOrder { return leftOrder < rightOrder }
+            if $0.isLocalArchive != $1.isLocalArchive { return !$0.isLocalArchive }
             return $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
 #else
         return []
 #endif
+    }
+
+    /// Discover provider-published folders, not app bundles: an installed client
+    /// without a signed-in/syncing account does not expose a filesystem to browse.
+    /// Keep preserved Google domains accessible, but never present them as live accounts.
+    static func cloudStorageLocations(in home: URL) -> [StorageLocation] {
+        let fm = FileManager.default
+        var result: [StorageLocation] = []
+        var addedPaths = Set<String>()
+        func append(_ url: URL, name: String) {
+            let resolved = url.resolvingSymlinksInPath().standardizedFileURL
+            guard isDirectory(resolved), addedPaths.insert(resolved.path).inserted else { return }
+            let archived = fm.fileExists(atPath: resolved.appendingPathComponent(".drive_fs_ignore_preserved_domain").path)
+            result.append(StorageLocation(name: name, url: resolved, kind: .cloudStorage, isLocalArchive: archived))
+        }
+
+        let cloudRoot = home.appendingPathComponent("Library/CloudStorage", isDirectory: true)
+        let cloudProviders = (try? fm.contentsOfDirectory(
+            at: cloudRoot,
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        for provider in cloudProviders {
+            let values = try? provider.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard values?.isDirectory == true || values?.isSymbolicLink == true else { continue }
+            append(provider, name: cloudDisplayName(provider.lastPathComponent))
+        }
+
+        let iCloudDrive = home.appendingPathComponent(
+            "Library/Mobile Documents/com~apple~CloudDocs",
+            isDirectory: true
+        )
+        append(iCloudDrive, name: "iCloud Drive")
+
+        // Older sync clients and user-visible links can live in the home folder.
+        // Resolve links before deduplication; never recursively search private app data.
+        let homeChildren = (try? fm.contentsOfDirectory(at: home,
+            includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])) ?? []
+        for folder in homeChildren {
+            let name = folder.lastPathComponent
+            if ["OneDrive", "Dropbox", "Google Drive", "Box"].contains(name) ||
+                name.hasPrefix("OneDrive - ") || name.hasPrefix("OneDrive-") || name.hasPrefix("GoogleDrive-") {
+                append(folder, name: cloudDisplayName(name))
+            }
+        }
+        return result.sorted {
+            if $0.isLocalArchive != $1.isLocalArchive { return !$0.isLocalArchive }
+            return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+    }
+
+    static func isDirectory(_ url: URL) -> Bool {
+        // File Provider placeholders expose their type as URL metadata even when
+        // no content is downloaded. Fall back to stat for ordinary symlinks.
+        if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true { return true }
+        var directory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &directory) && directory.boolValue
+    }
+
+    static func isCloudStorage(_ url: URL, home: URL = homeDirectory) -> Bool {
+        let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let roots = ["Library/CloudStorage", "Library/Mobile Documents"].map {
+            home.appendingPathComponent($0).resolvingSymlinksInPath().standardizedFileURL.path
+        }
+        if roots.contains(where: { path == $0 || path.hasPrefix($0 + "/") }) { return true }
+        let homePath = home.resolvingSymlinksInPath().standardizedFileURL.path + "/"
+        guard path.hasPrefix(homePath), let first = path.dropFirst(homePath.count).split(separator: "/").first else { return false }
+        return ["OneDrive", "Dropbox", "Google Drive", "Box"].contains(String(first)) ||
+            first.hasPrefix("OneDrive - ") || first.hasPrefix("OneDrive-") || first.hasPrefix("GoogleDrive-")
+    }
+
+    static func directoryContents(at url: URL, showHidden: Bool) throws -> [URL] {
+        let read: (URL) throws -> [URL] = { directory in
+            try FileManager.default.contentsOfDirectory(at: directory,
+                includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey],
+                options: showHidden ? [] : [.skipsHiddenFiles])
+        }
+#if targetEnvironment(macCatalyst) || os(macOS)
+        if isCloudStorage(url) {
+            // Run off the UI thread. Coordinate the directory listing with its
+            // provider; do not read file contents or recursively hydrate the drive.
+            var coordinationError: NSError?
+            var result: Result<[URL], Error>?
+            NSFileCoordinator().coordinate(readingItemAt: url, options: .withoutChanges,
+                error: &coordinationError) { coordinatedURL in
+                    result = Result { try read(coordinatedURL) }
+                }
+            if let coordinationError { throw coordinationError }
+            guard let result else { throw CocoaError(.fileReadUnknown) }
+            return try result.get()
+        }
+#endif
+        return try read(url)
     }
 
     private static func cloudDisplayName(_ directoryName: String) -> String {
@@ -171,3 +252,35 @@ enum HostFileSystem {
 #endif
     }
 }
+
+#if targetEnvironment(macCatalyst) || os(macOS)
+/// Observe only the folder the user is browsing, not an entire cloud account.
+/// Its owner must stop registration explicitly: NSFileCoordinator retains presenters.
+final class CloudDirectoryObserver: NSObject, NSFilePresenter {
+    let presentedItemURL: URL?
+    let presentedItemOperationQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 1
+        return queue
+    }()
+    private let onChange: () -> Void
+
+    init(url: URL, onChange: @escaping () -> Void) {
+        presentedItemURL = url
+        self.onChange = onChange
+        super.init()
+        NSFileCoordinator.addFilePresenter(self)
+    }
+
+    func stop() { NSFileCoordinator.removeFilePresenter(self) }
+    func presentedItemDidChange() { onChange() }
+    func presentedSubitemDidAppear(at url: URL) { onChange() }
+    func presentedSubitemDidChange(at url: URL) { onChange() }
+    func presentedSubitem(at oldURL: URL, didMoveTo newURL: URL) { onChange() }
+    func presentedItemDidMove(to newURL: URL) { onChange() }
+    func accommodatePresentedSubitemDeletion(at url: URL, completionHandler: @escaping (Error?) -> Void) {
+        completionHandler(nil)
+        onChange()
+    }
+}
+#endif
