@@ -1,8 +1,8 @@
 # OpenCommander
 
-Kostenloser Open-Source-Dateimanager fuer Android, iPhone, iPad und macOS: zwei Seiten, lokale Dateien, ZIP, Drag & Drop und Rueckgaengig. Keine Werbung, kein Tracking, kein Konto.
+Kostenloser Open-Source-Dateimanager fuer Android, iPhone, iPad, macOS und Linux: zwei Seiten, lokale Dateien, ZIP, Drag & Drop und Rueckgaengig. Keine Werbung, kein Tracking, kein Konto.
 
-OpenCommander ist ein lokaler Dateimanager fuer Android, iOS und macOS im Stil eines zweigeteilten Commanders. Die App ist fuer Nutzer gedacht, die Dateien schnell zwischen zwei Seiten organisieren wollen und dabei eine transparente, kostenlose und quelloffene App bevorzugen.
+OpenCommander ist ein lokaler Dateimanager fuer Android, iOS, macOS und Linux im Stil eines zweigeteilten Commanders. Die App ist fuer Nutzer gedacht, die Dateien schnell zwischen zwei Seiten organisieren wollen und dabei eine transparente, kostenlose und quelloffene App bevorzugen.
 
 ## Funktionen
 
@@ -95,6 +95,26 @@ app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Beim ersten Start muss Android den benoetigten Dateizugriff erlauben. Unter Android 10 wird dafuer ein Ordner im Systemdialog ausgewaehlt; unter Android 11 und neuer wird der spezielle Zugriff auf alle Dateien verwendet.
+
+### Linux
+
+Die native Qt-Desktop-Version unter `linux/` orientiert sich an der Mac-Version:
+zwei Bereiche mit je Ordnerbaum und Dateiliste, Kopieren/Verschieben, sichere
+Ruecknahme, ZIP, Drag-and-drop, Desktop-Zwischenablage, Vorschau sowie Deutsch/Englisch.
+
+```bash
+./linux/run.sh
+```
+
+Mit `./linux/build.sh` entsteht ein eigenstaendig startbares Linux-Paket unter
+`linux/artifacts/`. Das x86_64-Paket wird auf Ubuntu 24.04 gebaut. Es verwendet
+vorhandene Linux-Laufwerke und Treiber, keine macOS-NTFS-Erweiterung.
+Der Dialog **Verbindungen** integriert USB-Einbinden/Auswerfen, SMB/SFTP/WebDAV
+sowie Google Drive und OneDrive über GNOME/GVFS. Bereits vorhandene rclone-Mounts
+werden automatisch erkannt. Voraussetzungen und Provider-Grenzen stehen in der Linux-Anleitung.
+Installationshinweise, Tests und Unterschiede zur Mac-Version stehen in
+[linux/README.md](linux/README.md). Der dokumentierte Linux-Stand ist **0.2.4**;
+Details zu Änderungen und Prüfungen stehen im [Linux-Änderungsprotokoll](linux/CHANGELOG.md).
 
 ### macOS
 

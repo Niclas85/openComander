@@ -30,3 +30,9 @@ release/*.apk
 release/*.apk.sha256
 /parity-evidence/
 /playstore/evidence/
+
+# Linux desktop build output and local test evidence.
+/linux/dist/
+/linux/artifacts/
+/linux/*.spec
+.pytest_cache/
