@@ -2,6 +2,17 @@ import Foundation
 import CryptoKit
 import Darwin
 
+/// Desktop selection rules mirror the Linux context menu and ZIP toolbar.
+enum DesktopInteractionPolicy {
+    static func contextSelection(clicked: String, selected: Set<String>) -> Set<String> {
+        selected.contains(clicked) ? selected : [clicked]
+    }
+
+    static func showsExtraction(archiveContext: Bool, selectedArchives: [Bool]) -> Bool {
+        archiveContext || (!selectedArchives.isEmpty && selectedArchives.allSatisfy { $0 })
+    }
+}
+
 /// Reject unsafe/ambiguous ZIP names before creating any output. Limits match
 /// the Linux desktop implementation and also apply to preview materialization.
 struct SafeArchiveLimits {

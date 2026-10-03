@@ -163,3 +163,13 @@ try fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: permissionsTarget
 mustFail("metadata-only external change") { try permissionsRecord.undo(move: false) }
 try check(SafeFileOperations.exists(permissionsTarget), "metadata-edited destination retained")
 print("PASS: undo protects external permission changes")
+try check(DesktopInteractionPolicy.contextSelection(clicked: "b", selected: ["a", "b"]) == ["a", "b"],
+          "context action retains existing multi-selection")
+try check(DesktopInteractionPolicy.contextSelection(clicked: "c", selected: ["a", "b"]) == ["c"],
+          "context action selects an unselected clicked entry")
+try check(!DesktopInteractionPolicy.showsExtraction(archiveContext: false, selectedArchives: []), "no extraction without selection")
+try check(!DesktopInteractionPolicy.showsExtraction(archiveContext: false, selectedArchives: [false]), "hide extraction for normal file")
+try check(!DesktopInteractionPolicy.showsExtraction(archiveContext: false, selectedArchives: [true, false]), "hide extraction for mixed selection")
+try check(DesktopInteractionPolicy.showsExtraction(archiveContext: false, selectedArchives: [true]), "show extraction for ZIP")
+try check(DesktopInteractionPolicy.showsExtraction(archiveContext: true, selectedArchives: []), "show extraction inside ZIP")
+print("PASS: Linux desktop context-selection and ZIP-action parity")

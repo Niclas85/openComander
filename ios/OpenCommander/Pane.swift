@@ -83,7 +83,11 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         currentDirectory = root
         treeGeneration += 1
         expandedTreeKeys.removeAll()
+#if targetEnvironment(macCatalyst)
+        rootNode = TreeNode(entry: FileEntry(url: URL(fileURLWithPath: "/", isDirectory: true), parent: nil), depth: 0)
+#else
         rootNode = TreeNode(entry: currentDirectory, depth: 0)
+#endif
         rootNode.expanded = true
         loadChildren(for: rootNode)
         selectedKeys.removeAll()
@@ -221,12 +225,13 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         }, for: .editingChanged)
         fileColumn.addArrangedSubview(filter)
         let sortRow = UIStackView()
-        sortRow.distribution = .fillEqually
+        sortRow.distribution = .fill
         for (index, key) in ["sort_name", "sort_size", "sort_type", "sort_date"].enumerated() {
             let button = UIButton(type: .system)
             button.setTitle(L10n.get(key), for: .normal)
             button.titleLabel?.font = .systemFont(ofSize: 11)
             button.accessibilityIdentifier = "Sort-\(title)-\(index)"
+            if index > 0 { button.widthAnchor.constraint(equalToConstant: [0, 90, 70, 125][index]).isActive = true }
             button.addAction(UIAction { [weak self] _ in
                 guard let self else { return }
                 self.sortAscending = self.sortField == index ? !self.sortAscending : true
@@ -348,6 +353,13 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
     }
 
     private func isEntryInside(_ parent: FileEntry, _ child: FileEntry) -> Bool {
+#if targetEnvironment(macCatalyst)
+        if parent.isPhysicalDirectory() {
+            let parentPath = parent.url.standardizedFileURL.path
+            let childPath = child.url.standardizedFileURL.path
+            if parentPath == "/" || childPath == parentPath || childPath.hasPrefix(parentPath + "/") { return true }
+        }
+#endif
         var cursor: FileEntry? = child
         while let c = cursor {
             if c.key() == parent.key() { return true }
@@ -372,6 +384,9 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
             rootNode.expanded = true
             loadChildren(for: rootNode)
         }
+#if targetEnvironment(macCatalyst)
+        _ = ensureTreePathVisible(rootNode, target: currentDirectory)
+#endif
         rebuildTree()
         refreshFiles()
     }
@@ -761,7 +776,11 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         if entry.opensInPaneByDefault() {
             openDirectory(entry)
         } else {
+#if targetEnvironment(macCatalyst)
+            viewController?.openDesktopEntry(entry)
+#else
             viewController?.openExternal(entry)
+#endif
         }
     }
 }
@@ -773,11 +792,18 @@ extension CommanderPane {
         let entry = tableView === treeList ? flatTree[indexPath.row].entry : visibleEntries[indexPath.row]
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
             guard let self, let controller = self.viewController else { return nil }
+            controller.activePane = self
+            self.viewController?.view.endEditing(true)
+            if !self.selectedKeys.contains(entry.key()) {
+                self.selectedKeys = DesktopInteractionPolicy.contextSelection(clicked: entry.key(), selected: self.selectedKeys)
+                self.updateSelectionStatus()
+                self.fileList.reloadData()
+            }
             var actions: [UIAction] = [
                 UIAction(title: L10n.get("open"), image: UIImage(systemName: "arrow.up.forward.app")) { _ in
                     controller.activePane = self
                     if entry.opensInPaneByDefault() { self.openDirectory(entry) }
-                    else { controller.openExternal(entry) }
+                    else { controller.openDesktopEntry(entry) }
                 },
                 UIAction(title: L10n.get("open_with"), image: UIImage(systemName: "app")) { _ in
                     controller.openDesktopFile(entry, chooseApplication: true)
@@ -792,9 +818,13 @@ extension CommanderPane {
                     self.openDirectory(entry)
                 })
             }
-            func selectEntry() {
+            func selectEntry(preserveSelection: Bool = true) {
                 controller.activePane = self
-                self.selectedKeys = [entry.key()]
+                if !preserveSelection || !self.selectedKeys.contains(entry.key()) {
+                    self.selectedKeys = preserveSelection
+                        ? DesktopInteractionPolicy.contextSelection(clicked: entry.key(), selected: self.selectedKeys)
+                        : [entry.key()]
+                }
                 self.updateSelectionStatus()
                 self.fileList.reloadData()
             }
@@ -805,7 +835,7 @@ extension CommanderPane {
                 })
             }
             actions.append(UIAction(title: L10n.get("file_info"), image: UIImage(systemName: "info.circle")) { _ in
-                selectEntry()
+                selectEntry(preserveSelection: false)
                 controller.showFileInfo()
             })
             if entry.isPhysical() {
@@ -953,6 +983,7 @@ class FileCell: UITableViewCell {
     let nameLabel = UILabel()
     let sizeLabel = UILabel()
     let dateLabel = UILabel()
+    private let typeLabel = UILabel()
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -983,6 +1014,33 @@ class FileCell: UITableViewCell {
         contentView.addSubview(nameLabel)
         contentView.addSubview(sizeLabel)
         contentView.addSubview(dateLabel)
+
+#if targetEnvironment(macCatalyst)
+        typeLabel.translatesAutoresizingMaskIntoConstraints = false
+        typeLabel.font = .systemFont(ofSize: 11)
+        typeLabel.textColor = .gray
+        sizeLabel.textAlignment = .right
+        dateLabel.textAlignment = .center
+        typeLabel.textAlignment = .center
+        contentView.addSubview(typeLabel)
+        NSLayoutConstraint.activate([
+            iconView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
+            iconView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 24), iconView.heightAnchor.constraint(equalToConstant: 24),
+            nameLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
+            nameLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            nameLabel.trailingAnchor.constraint(equalTo: sizeLabel.leadingAnchor, constant: -4),
+            sizeLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            sizeLabel.widthAnchor.constraint(equalToConstant: 90),
+            sizeLabel.trailingAnchor.constraint(equalTo: typeLabel.leadingAnchor),
+            typeLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            typeLabel.widthAnchor.constraint(equalToConstant: 70),
+            typeLabel.trailingAnchor.constraint(equalTo: dateLabel.leadingAnchor),
+            dateLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            dateLabel.widthAnchor.constraint(equalToConstant: 125),
+            dateLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
+        ])
+#else
         
         NSLayoutConstraint.activate([
             iconView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
@@ -1000,6 +1058,7 @@ class FileCell: UITableViewCell {
             dateLabel.leadingAnchor.constraint(equalTo: sizeLabel.trailingAnchor, constant: 8),
             dateLabel.bottomAnchor.constraint(equalTo: sizeLabel.bottomAnchor)
         ])
+#endif
     }
     
     required init?(coder: NSCoder) {
@@ -1035,7 +1094,7 @@ class FileCell: UITableViewCell {
         nameLabel.text = entry.name()
         nameLabel.textColor = theme.primaryText
         
-        if entry.isDirectoryLike() {
+        if entry.isDirectoryLike() && !entry.isZipArchive() {
             sizeLabel.text = "DIR"
             iconView.kind = "folder"
         } else {
@@ -1065,6 +1124,9 @@ class FileCell: UITableViewCell {
             }
         }
         iconView.setNeedsDisplay()
+#if targetEnvironment(macCatalyst)
+        typeLabel.text = entry.isPhysicalDirectory() || entry.zipDirectory ? "DIR" : (entry.name() as NSString).pathExtension.uppercased()
+#endif
         
         if entry.modified() > 0 {
             let d = Date(timeIntervalSince1970: TimeInterval(entry.modified() / 1000))

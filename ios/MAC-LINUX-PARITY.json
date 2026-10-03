@@ -5,6 +5,10 @@
   "status": "native desktop core port implemented; not exhaustive Linux parity",
   "implemented": [
     "Shared light/dark palette and two-pane styling",
+    "Linux toolbar order, context-only extraction action, header Copy/Move and Dark switches",
+    "System-root tree and actual Name/Size/Type/Date columns",
+    "Context menu preserves an existing multi-selection; properties target the clicked entry",
+    "Media opens in-app on double-click or Return; audio hides video playback controls",
     "Per-pane navigation history, name filter, sortable metadata and adjustable tree divider",
     "F2 rename, F5 copy, F6 move alongside existing Command shortcuts",
     "Image/audio/video preview in visible filtered/sorted order; document Quick Look",
@@ -30,10 +34,17 @@
       "Filtered descending image order is respected by preview",
       "ZIP extraction, matching extracted file hash and recovery via history undo",
       "ZIP file properties show metadata",
-      "Mount and eject a newly created empty HFS+ disk image via Connections"
+      "Mount and eject a newly created empty HFS+ disk image via Connections",
+      "Copy/Move switch toggles both ways; folder chooser absent from desktop toolbar",
+      "Extraction action visible for ZIP and hidden for mixed ZIP/ordinary selection",
+      "Right-click Rename retains two selected entries and requests a single item",
+      "Image double-click opens in-app; audio omits video controls and video exposes controls",
+      "Installed app visually shows separate metadata columns, ZIP icon/size and a system-root tree"
     ]
   },
   "remaining": [
+    "Toolkit-native widgets are not pixel-identical; Mac-only default-app preferences remain accessible",
+    "Mouse modifier/range-selection behavior still needs a complete Linux/Mac equivalence pass",
     "Linux GIO SFTP/WebDAV authentication and mounts have not been reproduced; Mac server actions use system URL handlers",
     "Cross-volume moves do not yet provide fine-grained in-flight cancellation",
     "Failures producing no output are not yet persisted as standalone failed history entries",

@@ -286,6 +286,7 @@ private final class ImageViewerViewController: UIViewController {
                     let item = AVPlayerItem(url: url)
                     let player = AVPlayer(playerItem: item)
                     self.playerController.player = player
+                    self.playerController.showsPlaybackControls = entry.mimeType().hasPrefix("video/")
                     self.playerController.view.isHidden = false
                     self.playerStatus = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
                         DispatchQueue.main.async {
@@ -352,10 +353,13 @@ private final class CompactActionToolbar: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         guard bounds.width > 0 else { return }
+        let buttons = self.buttons.filter { !$0.isHidden }
+        guard !buttons.isEmpty else { return }
         func widths(fontSize: CGFloat) -> [CGFloat] {
             let font = UIFont.systemFont(ofSize: fontSize)
             return buttons.map {
-                max(24, ceil((($0.currentTitle ?? "") as NSString).size(withAttributes: [.font: font]).width) + horizontalPadding)
+                max(24, ceil((($0.currentTitle ?? "") as NSString).size(withAttributes: [.font: font]).width)
+                    + horizontalPadding + ($0.currentImage == nil ? 0 : 20))
             }
         }
         let spacing = CGFloat(max(0, buttons.count - 1)) * gap
@@ -442,6 +446,8 @@ class ViewController: UIViewController {
     var rightPane: CommanderPane!
     weak var activePane: CommanderPane?
     private weak var extractActionButton: UIButton?
+    private weak var desktopActionToolbar: CompactActionToolbar?
+    private weak var hiddenActionButton: UIButton?
     weak var activeDragPane: CommanderPane?
     var externalDropInProgress = false
     private(set) var fileOperationInProgress = false
@@ -761,7 +767,51 @@ class ViewController: UIViewController {
         languageButton.accessibilityIdentifier = "LanguageButton"
         languageButton.addTarget(self, action: #selector(showLanguageDialog), for: .touchUpInside)
 
-        for button in [helpButton, legalButton, languageButton!] {
+#if targetEnvironment(macCatalyst)
+        let modeRow = UIStackView()
+        modeRow.axis = .horizontal
+        modeRow.alignment = .center
+        modeRow.spacing = 6
+        for text in [L10n.get("copy"), L10n.get("move")] {
+            let label = UILabel()
+            label.text = text
+            label.font = .systemFont(ofSize: 13)
+            label.textColor = theme.primaryText
+            modeRow.addArrangedSubview(label)
+        }
+        let modeSwitch = UISwitch()
+        modeSwitch.isOn = moveMode
+        modeSwitch.onTintColor = UIColor(hex: "#238465")
+        modeSwitch.accessibilityIdentifier = "OperationModeSwitch"
+        modeSwitch.accessibilityLabel = "\(L10n.get("copy")) / \(L10n.get("move"))"
+        modeSwitch.addAction(UIAction { [weak self, weak modeSwitch] _ in
+            guard let self, let modeSwitch else { return }
+            self.moveMode = modeSwitch.isOn
+            self.updateGlobalStatus(L10n.get(self.moveMode ? "operation_mode_move_active" : "operation_mode_copy_active"))
+        }, for: .valueChanged)
+        modeRow.insertArrangedSubview(modeSwitch, at: 1)
+        titleRow.addArrangedSubview(modeRow)
+        let themeRow = UIStackView()
+        themeRow.axis = .horizontal
+        themeRow.alignment = .center
+        themeRow.spacing = 6
+        let darkLabel = UILabel()
+        darkLabel.text = L10n.get("dark")
+        darkLabel.font = .systemFont(ofSize: 13)
+        darkLabel.textColor = theme.primaryText
+        let darkSwitch = UISwitch()
+        darkSwitch.isOn = darkMode
+        darkSwitch.accessibilityIdentifier = "ThemeSwitch"
+        darkSwitch.accessibilityLabel = L10n.get("dark")
+        darkSwitch.addAction(UIAction { [weak self] _ in self?.toggleDarkModeFromTap() }, for: .valueChanged)
+        themeRow.addArrangedSubview(darkLabel)
+        themeRow.addArrangedSubview(darkSwitch)
+        titleRow.addArrangedSubview(themeRow)
+        let headerButtons = [legalButton, languageButton!]
+#else
+        let headerButtons = [helpButton, legalButton, languageButton!]
+#endif
+        for button in headerButtons {
             button.constraints.filter { $0.firstAttribute == .height }.forEach { $0.isActive = false }
             button.titleLabel?.font = .systemFont(ofSize: 10)
 #if targetEnvironment(macCatalyst)
@@ -787,24 +837,29 @@ class ViewController: UIViewController {
         tintButton(button: openFolderButton, lightFill: "#EAF7FF", lightStroke: "#70AFD1", lightText: "#164B68", darkFill: "#153747", darkStroke: "#4388A8", darkText: "#E3F6FF")
         openFolderButton.addTarget(self, action: #selector(showComputerLocations), for: .touchUpInside)
 
+#if !targetEnvironment(macCatalyst)
         let toolbar = CompactActionToolbar(buttons: [openFolderButton, undoButton, deleteButton, renameButton,
             operationButton, historyButton, zipButton, themeButton])
         toolbar.accessibilityIdentifier = "ActionToolbar"
         topBar.addArrangedSubview(toolbar)
+#endif
 #if targetEnvironment(macCatalyst)
         let moreActions: [(String, Selector)] = [
             ("new_folder", #selector(createFolder)), ("extract_archive", #selector(extractSelection)),
-            ("preview", #selector(previewSelectedEntry)), ("file_info", #selector(showFileInfo)),
-            ("refresh", #selector(refreshActivePane)), ("toggle_hidden", #selector(toggleHiddenFiles)),
-            ("connections", #selector(showConnections))]
+            ("preview", #selector(previewSelectedEntry)), ("toggle_hidden", #selector(toggleHiddenFiles))]
         let extraButtons = moreActions.map { key, action -> UIButton in
             let button = miniButton(label: L10n.get(key))
             button.accessibilityIdentifier = "DesktopAction-\(key)"
             button.addTarget(self, action: action, for: .touchUpInside)
             if key == "extract_archive" { extractActionButton = button }
+            if key == "toggle_hidden" { hiddenActionButton = button }
             return button
         }
-        topBar.addArrangedSubview(CompactActionToolbar(buttons: extraButtons))
+        let toolbar = CompactActionToolbar(buttons: [renameButton, extraButtons[0], deleteButton, zipButton,
+            extraButtons[1], extraButtons[2], undoButton, historyButton, helpButton, extraButtons[3]])
+        toolbar.accessibilityIdentifier = "ActionToolbar"
+        desktopActionToolbar = toolbar
+        topBar.addArrangedSubview(toolbar)
         updateDesktopActions()
 #endif
         return topBar
@@ -813,8 +868,15 @@ class ViewController: UIViewController {
     func updateDesktopActions() {
         let selected = activePane?.selectedEntries() ?? []
         let archiveContext = activePane?.currentDirectory.isZipEntry() == true || activePane?.currentDirectory.isZipArchive() == true
-        extractActionButton?.isEnabled = !operationInProgress &&
-            (archiveContext || (!selected.isEmpty && selected.allSatisfy { $0.isZipArchive() || $0.isZipEntry() }))
+        let showsExtraction = DesktopInteractionPolicy.showsExtraction(archiveContext: archiveContext,
+            selectedArchives: selected.map { $0.isZipArchive() || $0.isZipEntry() })
+        extractActionButton?.isHidden = !showsExtraction
+        extractActionButton?.isEnabled = !operationInProgress && showsExtraction
+        desktopActionToolbar?.setNeedsLayout()
+        let hidden = UserDefaults.standard.bool(forKey: "show_hidden_files")
+        hiddenActionButton?.setImage(UIImage(systemName: hidden ? "checkmark.square.fill" : "square"), for: .normal)
+        hiddenActionButton?.isSelected = hidden
+        hiddenActionButton?.accessibilityValue = L10n.get(hidden ? "hidden_visible" : "hidden_hidden")
     }
 
     override var keyCommands: [UIKeyCommand]? {
@@ -859,7 +921,8 @@ class ViewController: UIViewController {
             key(L10n.get("open"), UIKeyCommand.inputDownArrow, command, #selector(openSelectedEntry)),
             key(L10n.get("preview"), " ", [], #selector(previewSelectedEntry)),
             key(L10n.get("preview"), "y", command, #selector(previewSelectedEntry)),
-            key(L10n.get("rename_button"), "\r", [], #selector(showRenameDialog)),
+            key(L10n.get("open"), "\r", [], #selector(openSelectedEntry)),
+            key(L10n.get("help"), UIKeyCommand.f1, [], #selector(showHelpDialog)),
             key(L10n.get("duplicate"), "d", command, #selector(duplicateSelection)),
             key(L10n.get("file_info"), "i", command, #selector(showFileInfo)),
             key(L10n.get("move_to_trash"), UIKeyCommand.inputDelete, command, #selector(moveSelectionToTrash)),
@@ -1053,6 +1116,10 @@ private extension ViewController {
         }
 
         var addedPaths = Set<String>()
+        let connections = miniButton(label: L10n.get("connections"))
+        connections.accessibilityIdentifier = "DesktopAction-connections"
+        connections.addTarget(self, action: #selector(showConnections), for: .touchUpInside)
+        stack.addArrangedSubview(connections)
         for location in locations where addedPaths.insert(location.url.standardizedFileURL.path).inserted {
             let button = UIButton(type: .system)
             button.setTitle(location.name, for: .normal)
@@ -2481,8 +2548,8 @@ extension ViewController: UIDocumentPickerDelegate {
                         })
                     }
                     alert.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel))
-                    alert.popoverPresentationController?.sourceView = self.openFolderButton
-                    alert.popoverPresentationController?.sourceRect = self.openFolderButton.bounds
+                    alert.popoverPresentationController?.sourceView = self.view
+                    alert.popoverPresentationController?.sourceRect = CGRect(x: self.view.bounds.midX, y: 100, width: 1, height: 1)
                     self.present(alert, animated: true)
                     self.updateGlobalStatus(L10n.get("connections"))
                 }
@@ -2885,6 +2952,7 @@ extension ViewController: UIDocumentPickerDelegate {
         rightPane.reloadTreeKeepingExpansion()
         leftPane.refreshFiles()
         rightPane.refreshFiles()
+        updateDesktopActions()
         updateGlobalStatus(L10n.get(visible ? "hidden_visible" : "hidden_hidden"))
     }
 
@@ -2896,9 +2964,24 @@ extension ViewController: UIDocumentPickerDelegate {
         if entry.opensInPaneByDefault() {
             pane.openDirectory(entry)
         } else {
+#if targetEnvironment(macCatalyst)
+            openDesktopEntry(entry)
+#else
+            openExternal(entry)
+#endif
+        }
+    }
+
+#if targetEnvironment(macCatalyst)
+    func openDesktopEntry(_ entry: FileEntry) {
+        let mime = entry.mimeType()
+        if ["image/", "video/", "audio/"].contains(where: { mime.hasPrefix($0) }) {
+            previewFile(entry)
+        } else {
             openExternal(entry)
         }
     }
+#endif
 
     @objc func previewSelectedEntry() {
         guard let entry = activePane?.selectedEntries().first else {
