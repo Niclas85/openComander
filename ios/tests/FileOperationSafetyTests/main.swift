@@ -82,3 +82,77 @@ try Data("added".utf8).write(to: folder.appendingPathComponent("new.txt"))
 mustFail("new directory child") { try folderRecord.undo(move: false) }
 try check(SafeFileOperations.exists(folder.appendingPathComponent("new.txt")), "added child retained")
 print("PASS: staged copy failure, replacement backup, same-size edits, copy undo, recovery, source conflict, move undo, partial retry and added children")
+
+let persistedTarget = try write("persisted.txt", "saved")
+let persisted = FileUndoRecord(source: source, destination: persistedTarget, replacedBackup: nil)
+let reloaded = try JSONDecoder().decode(FileUndoRecord.self, from: JSONEncoder().encode(persisted))
+try check(reloaded.createdAt == persisted.createdAt, "history timestamp survives restart")
+try reloaded.undo(move: false)
+try check(!SafeFileOperations.exists(persistedTarget), "saved undo remains operational")
+let guardedTarget = try write("persisted-guard.txt", "before")
+let guarded = FileUndoRecord(source: source, destination: guardedTarget, replacedBackup: nil)
+let guardedReloaded = try JSONDecoder().decode(FileUndoRecord.self, from: JSONEncoder().encode(guarded))
+try Data("after!".utf8).write(to: guardedTarget)
+mustFail("persisted snapshot guard") { try guardedReloaded.undo(move: false) }
+try check(contents(guardedTarget) == "after!", "persisted history preserves external changes")
+print("PASS: Codable history roundtrip and post-restart conflict protection")
+
+let cancellation = FileOperationCancellation()
+let cancelTarget = try write("cancel-target.txt", "old destination")
+cancellation.cancel()
+mustFail("cancel before transfer") {
+    _ = try SafeFileOperations.copyReplacing(source: source, destination: cancelTarget, replace: true, copy: cancellation.copy)
+}
+try check(contents(cancelTarget) == "old destination", "cancel keeps destination")
+cancellation.reset()
+let nativeCopy = fixture.appendingPathComponent("native-copy.txt")
+_ = try SafeFileOperations.copyReplacing(source: source, destination: nativeCopy, replace: false, copy: cancellation.copy)
+try check(contents(nativeCopy) == contents(source), "native cancellable copy preserves content")
+mustFail("cancel after staging before publish") {
+    _ = try SafeFileOperations.copyReplacing(source: source, destination: cancelTarget, replace: true, copy: { from, to in
+        try cancellation.copy(from, to)
+        cancellation.cancel()
+        try cancellation.check()
+    })
+}
+try check(contents(cancelTarget) == "old destination", "cancelled staging does not displace target")
+print("PASS: native copy and cancellation preserves existing destination")
+
+cancellation.reset()
+let nativeFolder = fixture.appendingPathComponent("native-folder")
+let nested = folder.appendingPathComponent("nested")
+try fm.createDirectory(at: nested, withIntermediateDirectories: false)
+try Data("nested content".utf8).write(to: nested.appendingPathComponent("child.txt"))
+try fm.createSymbolicLink(atPath: folder.appendingPathComponent("outside-link").path, withDestinationPath: source.path)
+try fm.createSymbolicLink(atPath: folder.appendingPathComponent("dangling-link").path, withDestinationPath: "/nonexistent-opencommander-fixture")
+_ = try SafeFileOperations.copyReplacing(source: folder, destination: nativeFolder, replace: false, copy: cancellation.copy)
+try check(contents(nativeFolder.appendingPathComponent("nested/child.txt")) == "nested content", "recursive native copy")
+try check(fm.destinationOfSymbolicLink(atPath: nativeFolder.appendingPathComponent("outside-link").path) == source.path, "copy does not dereference links")
+try check(SafeFileOperations.exists(nativeFolder.appendingPathComponent("dangling-link")), "dangling link copied")
+let scannedBytes = try BoundedFolderSize.bytes(at: folder)
+try check(scannedBytes == Int64("added".utf8.count + "nested content".utf8.count), "folder scan skips symlink content (actual: \(scannedBytes))")
+mustFail("bounded folder entry limit") { _ = try BoundedFolderSize.bytes(at: folder, maximumEntries: 1) }
+mustFail("bounded folder timeout") { _ = try BoundedFolderSize.bytes(at: folder, timeout: -1) }
+print("PASS: recursive native copy, symlinks and bounded folder metadata")
+
+for name in ["../escape", "/absolute", "a/../escape", "a/./b", "a//b", "C:/escape", "a\\b", "nul\0name", ""] {
+    mustFail("unsafe ZIP name \(name)") {
+        var limits = SafeArchiveLimits()
+        try limits.include(path: name, size: 1, symbolicLink: false)
+    }
+}
+mustFail("ZIP symlink") {
+    var limits = SafeArchiveLimits()
+    try limits.include(path: "link", size: 1, symbolicLink: true)
+}
+mustFail("case insensitive ZIP duplicate") {
+    var limits = SafeArchiveLimits()
+    try limits.include(path: "Folder/", size: 0, symbolicLink: false)
+    try limits.include(path: "folder", size: 0, symbolicLink: false)
+}
+mustFail("ZIP byte limit") {
+    var limits = SafeArchiveLimits()
+    try limits.include(path: "big", size: SafeArchiveLimits.maximumBytes, symbolicLink: false)
+    try limits.include(path: "extra", size: 1, symbolicLink: false)
+}
+print("PASS: ZIP traversal, duplicate, symlink and expanded-size safety limits")

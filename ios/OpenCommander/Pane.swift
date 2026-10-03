@@ -1,4 +1,5 @@
 import UIKit
+import QuickLookThumbnailing
 
 class TreeNode {
     let entry: FileEntry
@@ -20,6 +21,14 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
     
     var flatTree: [TreeNode] = []
     var visibleEntries: [FileEntry] = []
+    private var allEntries: [FileEntry] = []
+    private var nameFilter = ""
+    private var sortField = 0
+    private var sortAscending = true
+    private weak var resizingColumns: UIStackView?
+    private weak var resizingTree: UIView?
+    private var treeWidthConstraint: NSLayoutConstraint?
+    private var treeFraction: CGFloat = 0.28
     var selectedKeys: Set<String> = []
     
     
@@ -97,6 +106,12 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         shell.backgroundColor = theme.panelBackground
         shell.isLayoutMarginsRelativeArrangement = true
         shell.layoutMargins = UIEdgeInsets(top: dp(8), left: dp(8), bottom: dp(8), right: dp(8))
+#if targetEnvironment(macCatalyst)
+        let accentLine = UIView()
+        accentLine.backgroundColor = UIColor(hex: title == "1" ? (vc.darkMode ? "#88baff" : "#185bb5") : (vc.darkMode ? "#79dcb9" : "#147454"))
+        accentLine.heightAnchor.constraint(equalToConstant: 3).isActive = true
+        shell.addArrangedSubview(accentLine)
+#endif
         
         let pathRow = UIStackView()
         pathRow.axis = .horizontal
@@ -140,6 +155,18 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         upButton.accessibilityIdentifier = "Up-\(title)"
         
         pathRow.addArrangedSubview(upButton)
+#if targetEnvironment(macCatalyst)
+        for (symbol, action, identifier) in [("chevron.left", #selector(navigateBack), "Back"),
+                                             ("chevron.right", #selector(navigateForward), "Forward")] {
+            let button = UIButton(type: .system)
+            button.setImage(UIImage(systemName: symbol), for: .normal)
+            button.accessibilityIdentifier = "\(identifier)-\(title)"
+            button.accessibilityLabel = L10n.get(identifier.lowercased())
+            button.addTarget(self, action: action, for: .touchUpInside)
+            button.widthAnchor.constraint(equalToConstant: 28).isActive = true
+            pathRow.insertArrangedSubview(button, at: pathRow.arrangedSubviews.count - 1)
+        }
+#endif
         pathRow.addArrangedSubview(pathText)
         pathRow.addArrangedSubview(selectionText)
         
@@ -180,6 +207,36 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         treeColumn.addArrangedSubview(treeList)
         
         let fileColumn = createColumn(title: L10n.get("files"), accent: accent, theme: theme)
+#if targetEnvironment(macCatalyst)
+        let filter = UITextField()
+        filter.placeholder = L10n.get("filter_names")
+        filter.text = nameFilter
+        filter.accessibilityIdentifier = "Filter-\(title)"
+        filter.borderStyle = .roundedRect
+        filter.clearButtonMode = .always
+        filter.font = .systemFont(ofSize: 12)
+        filter.addAction(UIAction { [weak self, weak filter] _ in
+            self?.nameFilter = filter?.text ?? ""
+            self?.applyListingOrder()
+        }, for: .editingChanged)
+        fileColumn.addArrangedSubview(filter)
+        let sortRow = UIStackView()
+        sortRow.distribution = .fillEqually
+        for (index, key) in ["sort_name", "sort_size", "sort_type", "sort_date"].enumerated() {
+            let button = UIButton(type: .system)
+            button.setTitle(L10n.get(key), for: .normal)
+            button.titleLabel?.font = .systemFont(ofSize: 11)
+            button.accessibilityIdentifier = "Sort-\(title)-\(index)"
+            button.addAction(UIAction { [weak self] _ in
+                guard let self else { return }
+                self.sortAscending = self.sortField == index ? !self.sortAscending : true
+                self.sortField = index
+                self.applyListingOrder()
+            }, for: .touchUpInside)
+            sortRow.addArrangedSubview(button)
+        }
+        fileColumn.addArrangedSubview(sortRow)
+#endif
         fileList = UITableView()
         fileList.accessibilityIdentifier = "FileList-\(title)"
         fileList.backgroundColor = theme.fileBackground
@@ -200,7 +257,24 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         fileColumn.addArrangedSubview(fileList)
         
         columns.addArrangedSubview(treeColumn)
+#if targetEnvironment(macCatalyst)
+        let divider = UIView()
+        divider.backgroundColor = theme.columnBorder
+        divider.widthAnchor.constraint(equalToConstant: 6).isActive = true
+        divider.accessibilityIdentifier = "TreeDivider-\(title)"
+        divider.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(resizeTree(_:))))
+        columns.addArrangedSubview(divider)
+#endif
         columns.addArrangedSubview(fileColumn)
+#if targetEnvironment(macCatalyst)
+        columns.distribution = .fill
+        let savedFraction = UserDefaults.standard.double(forKey: "tree_fraction_\(title)")
+        treeFraction = savedFraction > 0 ? CGFloat(min(0.55, max(0.15, savedFraction))) : 0.28
+        resizingColumns = columns
+        resizingTree = treeColumn
+        treeWidthConstraint = treeColumn.widthAnchor.constraint(equalTo: columns.widthAnchor, multiplier: treeFraction)
+        treeWidthConstraint?.isActive = true
+#endif
         
         treeColumn.translatesAutoresizingMaskIntoConstraints = false
         fileColumn.translatesAutoresizingMaskIntoConstraints = false
@@ -211,6 +285,16 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         rebuildTree()
         
         return shell
+    }
+
+    @objc private func resizeTree(_ gesture: UIPanGestureRecognizer) {
+        guard let columns = resizingColumns, let tree = resizingTree, columns.bounds.width > 0 else { return }
+        treeFraction = min(0.55, max(0.15, treeFraction + gesture.translation(in: columns).x / columns.bounds.width))
+        gesture.setTranslation(.zero, in: columns)
+        treeWidthConstraint?.isActive = false
+        treeWidthConstraint = tree.widthAnchor.constraint(equalTo: columns.widthAnchor, multiplier: treeFraction)
+        treeWidthConstraint?.isActive = true
+        if gesture.state == .ended { UserDefaults.standard.set(Double(treeFraction), forKey: "tree_fraction_\(title)") }
     }
     
     private func createColumn(title: String, accent: String, theme: ViewController.ThemeColors) -> UIStackView {
@@ -353,11 +437,13 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         listingPending = false
         switch result {
         case .success(let entries):
-            visibleEntries = entries
-            showDirectoryMessage(entries.isEmpty ? L10n.get("directory_empty") : nil, retry: false)
+            allEntries = entries
+            applyListingOrder()
+            showDirectoryMessage(visibleEntries.isEmpty ? L10n.get("directory_empty") : nil, retry: false)
         case .failure(let error):
             // Do not leave stale rows actionable after a failed refresh.
             visibleEntries.removeAll()
+            allEntries.removeAll()
             currentDirectoryBytes = -2
 #if targetEnvironment(macCatalyst)
             let message = String(format: L10n.get("directory_error"), error.localizedDescription)
@@ -371,6 +457,26 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         updateSelectionStatus()
         fileList?.reloadData()
         if case .success = result { scanDirectorySize() }
+    }
+
+    private func applyListingOrder() {
+        visibleEntries = allEntries.filter { nameFilter.isEmpty || $0.name().localizedCaseInsensitiveContains(nameFilter) }
+            .sorted { lhs, rhs in
+                if lhs.isDirectoryLike() != rhs.isDirectoryLike() { return lhs.isDirectoryLike() }
+                var order: ComparisonResult
+                switch sortField {
+                case 1: order = lhs.size() == rhs.size() ? .orderedSame : (lhs.size() < rhs.size() ? .orderedAscending : .orderedDescending)
+                case 2: order = (lhs.name() as NSString).pathExtension.localizedCaseInsensitiveCompare((rhs.name() as NSString).pathExtension)
+                case 3: order = lhs.modified() == rhs.modified() ? .orderedSame : (lhs.modified() < rhs.modified() ? .orderedAscending : .orderedDescending)
+                default: order = .orderedSame
+                }
+                if order == .orderedSame { order = lhs.name().localizedStandardCompare(rhs.name()) }
+                return sortAscending ? order == .orderedAscending : order == .orderedDescending
+            }
+        selectedKeys.formIntersection(Set(visibleEntries.map { $0.key() }))
+        fileList?.reloadData()
+        updateSelectionStatus()
+        showDirectoryMessage(visibleEntries.isEmpty ? L10n.get("directory_empty") : nil, retry: false)
     }
 
     private func showDirectoryMessage(_ message: String?, retry: Bool) {
@@ -560,6 +666,7 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
     }
     
     func updateSelectionStatus() {
+        viewController?.updateDesktopActions()
         guard let selectionText = selectionText, let pathText = pathText else { return }
         let sizeStr = currentDirectoryBytes >= 0 ? "\(currentDirectoryBytes) B" : (currentDirectoryBytes == -2 ? "—" : "...")
         selectionText.text = listingPending ? L10n.get("directory_loading") : "\(selectedKeys.count)/\(visibleEntries.count) | \(sizeStr)"
@@ -678,6 +785,33 @@ extension CommanderPane {
                     self.openDirectory(entry)
                 })
             }
+            func selectEntry() {
+                controller.activePane = self
+                self.selectedKeys = [entry.key()]
+                self.updateSelectionStatus()
+                self.fileList.reloadData()
+            }
+            if entry.isZipArchive() || entry.isZipEntry() {
+                actions.append(UIAction(title: L10n.get("extract_archive"), image: UIImage(systemName: "archivebox")) { _ in
+                    selectEntry()
+                    controller.extractSelection()
+                })
+            }
+            actions.append(UIAction(title: L10n.get("file_info"), image: UIImage(systemName: "info.circle")) { _ in
+                selectEntry()
+                controller.showFileInfo()
+            })
+            if entry.isPhysical() {
+                for (title, selector) in [("copy", #selector(ViewController.copySelectionToClipboard)),
+                                          ("cut", #selector(ViewController.cutSelectionToClipboard)),
+                                          ("rename_button", #selector(ViewController.showRenameDialog)),
+                                          ("move_to_trash", #selector(ViewController.moveSelectionToTrash))] {
+                    actions.append(UIAction(title: L10n.get(title)) { _ in
+                        selectEntry()
+                        controller.perform(selector)
+                    })
+                }
+            }
             return UIMenu(children: actions)
         }
     }
@@ -793,6 +927,15 @@ extension CommanderPane {
 import UIKit
 
 class FileCell: UITableViewCell {
+    private static let thumbnails: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 128
+        cache.totalCostLimit = 8 * 1024 * 1024
+        return cache
+    }()
+    private var thumbnailRequest: QLThumbnailGenerator.Request?
+    private var representedKey: String?
+    private let thumbnailView = UIImageView()
     let iconView = FileIconView()
     let nameLabel = UILabel()
     let sizeLabel = UILabel()
@@ -816,6 +959,14 @@ class FileCell: UITableViewCell {
         dateLabel.translatesAutoresizingMaskIntoConstraints = false
         
         contentView.addSubview(iconView)
+        thumbnailView.translatesAutoresizingMaskIntoConstraints = false
+        thumbnailView.contentMode = .scaleAspectFit
+        contentView.addSubview(thumbnailView)
+        NSLayoutConstraint.activate([
+            thumbnailView.leadingAnchor.constraint(equalTo: iconView.leadingAnchor),
+            thumbnailView.topAnchor.constraint(equalTo: iconView.topAnchor),
+            thumbnailView.widthAnchor.constraint(equalTo: iconView.widthAnchor),
+            thumbnailView.heightAnchor.constraint(equalTo: iconView.heightAnchor)])
         contentView.addSubview(nameLabel)
         contentView.addSubview(sizeLabel)
         contentView.addSubview(dateLabel)
@@ -843,6 +994,31 @@ class FileCell: UITableViewCell {
     }
     
     func configure(with entry: FileEntry, theme: ViewController.ThemeColors, isSelected: Bool) {
+        if let request = thumbnailRequest { QLThumbnailGenerator.shared.cancel(request) }
+        thumbnailRequest = nil
+        thumbnailView.image = nil
+        iconView.isHidden = false
+        let key = "\(entry.key())|\(entry.modified())|\(entry.size())"
+        representedKey = key
+        let mime = entry.mimeType()
+        if entry.zipPath == nil && !entry.isDirectoryLike() && (mime.hasPrefix("image/") || mime.hasPrefix("video/")) {
+            if let cached = Self.thumbnails.object(forKey: key as NSString) {
+                thumbnailView.image = cached; iconView.isHidden = true
+            } else {
+                let request = QLThumbnailGenerator.Request(fileAt: entry.url, size: CGSize(width: 48, height: 48), scale: 1, representationTypes: .thumbnail)
+                thumbnailRequest = request
+                QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { [weak self] representation, _ in
+                    guard let representation else { return }
+                    DispatchQueue.main.async {
+                        guard let self, self.representedKey == key else { return }
+                        let image = representation.uiImage
+                        Self.thumbnails.setObject(image, forKey: key as NSString, cost: 48 * 48 * 4)
+                        self.thumbnailView.image = image
+                        self.iconView.isHidden = true
+                    }
+                }
+            }
+        }
         nameLabel.text = entry.name()
         nameLabel.textColor = theme.primaryText
         

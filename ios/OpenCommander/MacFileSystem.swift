@@ -144,6 +144,15 @@ enum HostFileSystem {
             isDirectory: true
         )
         append(iCloudDrive, name: "iCloud Drive")
+        // Dropbox's sync folder may have been moved outside the home directory.
+        if let data = try? Data(contentsOf: home.appendingPathComponent(".dropbox/info.json")),
+           let accounts = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Any]] {
+            for account in accounts.values {
+                if let path = account["path"] as? String, path.hasPrefix("/") {
+                    append(URL(fileURLWithPath: path, isDirectory: true), name: "Dropbox")
+                }
+            }
+        }
 
         // Older sync clients and user-visible links can live in the home folder.
         // Resolve links before deduplication; never recursively search private app data.

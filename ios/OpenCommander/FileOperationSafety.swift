@@ -1,5 +1,87 @@
 import Foundation
 import CryptoKit
+import Darwin
+
+/// Reject unsafe/ambiguous ZIP names before creating any output. Limits match
+/// the Linux desktop implementation and also apply to preview materialization.
+struct SafeArchiveLimits {
+    static let maximumEntries = 100_000
+    static let maximumBytes: UInt64 = 4 * 1024 * 1024 * 1024
+    private var paths = Set<String>()
+    private var bytes: UInt64 = 0
+
+    mutating func include(path: String, size: UInt64, symbolicLink: Bool) throws {
+        let name = path.hasSuffix("/") ? String(path.dropLast()) : path
+        let parts = name.split(separator: "/", omittingEmptySubsequences: false)
+        guard !symbolicLink, !name.isEmpty, !name.hasPrefix("/"),
+              !name.contains("\\"), !name.contains("\0"),
+              !parts.contains(".."), !parts.contains("."), !parts.contains(""),
+              !(parts.first?.contains(":") ?? false),
+              paths.count < Self.maximumEntries, size <= Self.maximumBytes - bytes,
+              paths.insert(name.precomposedStringWithCanonicalMapping.lowercased()).inserted else {
+            throw NSError(domain: "OpenCommander.ZIP", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: L10n.get("extract_unsafe")])
+        }
+        bytes += size
+    }
+}
+
+enum BoundedFolderSize {
+    static func bytes(at root: URL, timeout: TimeInterval = 10, maximumEntries: Int = 100_000) throws -> Int64 {
+        let deadline = Date().addingTimeInterval(timeout)
+        var total: Int64 = 0
+        var count = 0
+        var enumerationError: Error?
+        let keys: Set<URLResourceKey> = [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]
+        guard let items = FileManager.default.enumerator(at: root, includingPropertiesForKeys: Array(keys),
+            errorHandler: { _, error in enumerationError = error; return false }) else {
+            throw CocoaError(.fileReadNoPermission)
+        }
+        for case let url as URL in items {
+            count += 1
+            guard count <= maximumEntries, Date() < deadline else { throw CocoaError(.userCancelled) }
+            let values = try url.resourceValues(forKeys: keys)
+            // DirectoryEnumerator does not descend through symlinks. Calling
+            // skipDescendants on a leaf can instead skip the next real directory.
+            if values.isSymbolicLink == true { continue }
+            if values.isRegularFile == true { total += Int64(values.fileSize ?? 0) }
+        }
+        if let enumerationError { throw enumerationError }
+        return total
+    }
+}
+
+/// Thread-safe cooperative cancellation. Partial copies exist only in staging.
+final class FileOperationCancellation {
+    private let lock = NSLock()
+    private var requested = false
+    func reset() { lock.lock(); requested = false; lock.unlock() }
+    func cancel() { lock.lock(); requested = true; lock.unlock() }
+    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return requested }
+    func check() throws { if isCancelled { throw CocoaError(.userCancelled) } }
+
+    func copy(_ source: URL, _ destination: URL) throws {
+        try check()
+#if os(macOS) || targetEnvironment(macCatalyst)
+        guard let state = copyfile_state_alloc() else { throw POSIXError(.ENOMEM) }
+        defer { copyfile_state_free(state) }
+        let callback: copyfile_callback_t = { _, _, _, _, _, context in
+            guard let context else { return COPYFILE_QUIT }
+            return Unmanaged<FileOperationCancellation>.fromOpaque(context).takeUnretainedValue().isCancelled ? COPYFILE_QUIT : COPYFILE_CONTINUE
+        }
+        copyfile_state_set(state, UInt32(COPYFILE_STATE_STATUS_CB), unsafeBitCast(callback, to: UnsafeRawPointer.self))
+        copyfile_state_set(state, UInt32(COPYFILE_STATE_STATUS_CTX), Unmanaged.passUnretained(self).toOpaque())
+        let flags = copyfile_flags_t(COPYFILE_ALL | COPYFILE_RECURSIVE | COPYFILE_NOFOLLOW_SRC | COPYFILE_EXCL)
+        guard copyfile(source.path, destination.path, state, flags) == 0 else {
+            try check()
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+#else
+        try FileManager.default.copyItem(at: source, to: destination)
+#endif
+        try check()
+    }
+}
 
 /// File operations kept separate from UIKit so failure paths can be tested with fixtures.
 enum SafeFileOperations {
@@ -28,6 +110,9 @@ enum SafeFileOperations {
             field(type.rawValue)
             field(String(describing: attributes[.systemFileNumber]))
             field(String((attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0))
+            for key in [FileAttributeKey.posixPermissions, .ownerAccountID, .groupOwnerAccountID] {
+                field(String(describing: attributes[key]))
+            }
             if type == .typeDirectory {
                 let children = try fm.contentsOfDirectory(at: item, includingPropertiesForKeys: nil)
                     .sorted { $0.lastPathComponent < $1.lastPathComponent }
@@ -95,15 +180,18 @@ enum SafeFileOperations {
     }
 }
 
-final class FileUndoRecord {
+final class FileUndoRecord: Codable {
+    let createdAt: Date
     let source: URL
     let destination: URL
     let replacedBackup: URL?
     private let snapshot: Data?
     private var destinationReverted = false
     private(set) var completed = false
+    var lastError: String?
 
     init(source: URL, destination: URL, replacedBackup: URL?) {
+        createdAt = Date()
         self.source = source
         self.destination = destination
         self.replacedBackup = replacedBackup

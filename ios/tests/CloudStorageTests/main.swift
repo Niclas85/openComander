@@ -37,6 +37,13 @@ check(locations.filter { $0.name.hasPrefix("Google Drive —") }.count == 2, "Go
 check(locations.last?.isLocalArchive == true, "preserved domain distinguished and sorted last")
 check(locations.filter { $0.isLocalArchive }.count == 1, "only marked domain is archived")
 print("PASS discovery: Google Drive, OneDrive multi-account, iCloud, third-party, legacy, links and archives")
+let customDropbox = try directory("Custom Sync/Dropbox")
+_ = try directory(".dropbox")
+let accountInfo = try JSONSerialization.data(withJSONObject: ["personal": ["path": customDropbox.path]])
+try accountInfo.write(to: fixture.appendingPathComponent(".dropbox/info.json"))
+check(HostFileSystem.cloudStorageLocations(in: fixture).contains { $0.url == customDropbox.standardizedFileURL },
+      "custom Dropbox sync path discovered")
+print("PASS Dropbox moved sync folder")
 
 check(HostFileSystem.isCloudStorage(myDrive, home: fixture), "Google child recognized")
 check(HostFileSystem.isCloudStorage(fixture.appendingPathComponent("OneDrive/child"), home: fixture), "linked child recognized")

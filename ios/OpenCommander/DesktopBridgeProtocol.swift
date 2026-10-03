@@ -7,6 +7,10 @@ protocol DesktopBridgeProtocol {
     func setFolderApplication(_ application: URL, completion: @escaping (NSError?) -> Void)
     func openFile(_ url: URL, application: URL?, completion: @escaping (Bool, NSError?) -> Void)
     func chooseApplication(for url: URL, title: String, completion: @escaping (Bool, NSError?) -> Void)
+    func unmountedVolumes(completion: @escaping ([[String: String]], NSError?) -> Void)
+    func mountVolume(_ identifier: String, completion: @escaping (NSError?) -> Void)
+    func ejectVolume(_ url: URL, completion: @escaping (NSError?) -> Void)
+    func installedCloudApplications() -> [[String: String]]
 }
 #endif
 

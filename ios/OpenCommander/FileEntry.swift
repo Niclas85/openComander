@@ -11,6 +11,16 @@ class FileEntry: Hashable, Equatable {
     let zipSize: Int64
     let zipModified: Int64
     let isUpButton: Bool
+    private var listingSize: Int64?
+    private var listingModified: Int64?
+    private var listingDirectory: Bool?
+
+    private func cacheListingMetadata() {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isDirectoryKey])
+        listingSize = values?.fileSize.map(Int64.init)
+        listingModified = values?.contentModificationDate.map { Int64($0.timeIntervalSince1970 * 1000) }
+        listingDirectory = values?.isDirectory
+    }
 
     var parent: FileEntry? {
         if let p = _parent { return p }
@@ -74,12 +84,7 @@ class FileEntry: Hashable, Equatable {
             return "resource/folder"
         }
         let ext = (zipPath != nil ? (name() as NSString).pathExtension : url.pathExtension).lowercased()
-        if let uti = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, ext as CFString, nil)?.takeRetainedValue() {
-            if let mime = UTTypeCopyPreferredTagWithClass(uti, kUTTagClassMIMEType)?.takeRetainedValue() {
-                return mime as String
-            }
-        }
-        return "application/octet-stream"
+        return UTType(filenameExtension: ext)?.preferredMIMEType ?? "application/octet-stream"
     }
 
     func isPhysical() -> Bool {
@@ -88,6 +93,7 @@ class FileEntry: Hashable, Equatable {
 
     func isPhysicalDirectory() -> Bool {
         if zipPath != nil { return false }
+        if let listingDirectory { return listingDirectory }
         return HostFileSystem.isDirectory(url)
     }
 
@@ -151,6 +157,7 @@ class FileEntry: Hashable, Equatable {
         if let _ = zipPath {
             return zipSize
         }
+        if let listingSize { return listingSize }
         do {
             let attr = try FileManager.default.attributesOfItem(atPath: url.path)
             return attr[.size] as? Int64 ?? 0
@@ -163,6 +170,7 @@ class FileEntry: Hashable, Equatable {
         if let _ = zipPath {
             return zipModified
         }
+        if let listingModified { return listingModified }
         do {
             let attr = try FileManager.default.attributesOfItem(atPath: url.path)
             if let date = attr[.modificationDate] as? Date {
@@ -181,7 +189,7 @@ class FileEntry: Hashable, Equatable {
 
     func readChildren(directoriesOnly: Bool) throws -> [FileEntry] {
         if isZipArchive() || isZipEntry() {
-            return zipChildren(directoriesOnly: directoriesOnly)
+            return try zipChildren(directoriesOnly: directoriesOnly)
         }
         
         var entries: [FileEntry] = []
@@ -189,6 +197,7 @@ class FileEntry: Hashable, Equatable {
             showHidden: UserDefaults.standard.bool(forKey: "show_hidden_files"))
         for childUrl in urls {
             let entry = FileEntry(url: childUrl, parent: self)
+            entry.cacheListingMetadata()
             if directoriesOnly && !entry.isDirectoryLike() {
                 continue
             }
@@ -211,17 +220,7 @@ class FileEntry: Hashable, Equatable {
             return archive.reduce(Int64(0)) { $0 + Int64($1.uncompressedSize) }
         }
         if !isPhysicalDirectory() { return size() }
-        guard let enumerator = FileManager.default.enumerator(
-            at: url,
-            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else { return 0 }
-        var total: Int64 = 0
-        for case let child as URL in enumerator {
-            let values = try? child.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
-            if values?.isRegularFile == true { total += Int64(values?.fileSize ?? 0) }
-        }
-        return total
+        return (try? BoundedFolderSize.bytes(at: url)) ?? -2
     }
 
     func materializedURLForOpening(sourceURL: URL? = nil) throws -> URL {
@@ -231,26 +230,45 @@ class FileEntry: Hashable, Equatable {
               let item = archive.first(where: { $0.path == zipPath }) else {
             throw NSError(domain: "OpenCommander", code: 2, userInfo: [NSLocalizedDescriptionKey: "ZIP entry is unavailable"])
         }
+        var limits = SafeArchiveLimits()
+        try limits.include(path: item.path, size: UInt64(item.uncompressedSize), symbolicLink: item.type == .symlink)
         let outputDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("OpenCommanderPreview", isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
         let output = outputDirectory.appendingPathComponent(name())
-        try archive.extract(item, to: output)
-        return output
+        do {
+            guard FileManager.default.createFile(atPath: output.path, contents: nil) else { throw CocoaError(.fileWriteUnknown) }
+            let handle = try FileHandle(forWritingTo: output)
+            defer { try? handle.close() }
+            var written: UInt64 = 0
+            let checksum = try archive.extract(item) { data in
+                guard UInt64(data.count) <= item.uncompressedSize - written else { throw CocoaError(.fileReadCorruptFile) }
+                written += UInt64(data.count)
+                try handle.write(contentsOf: data)
+            }
+            guard checksum == item.checksum, written == item.uncompressedSize else { throw CocoaError(.fileReadCorruptFile) }
+            return output
+        } catch {
+            try? FileManager.default.removeItem(at: outputDirectory)
+            throw error
+        }
     }
 
-    private func zipChildren(directoriesOnly: Bool) -> [FileEntry] {
-        guard let archive = Archive(url: url, accessMode: .read) else { return [] }
+    private func zipChildren(directoriesOnly: Bool) throws -> [FileEntry] {
+        let archive = try Archive(url: url, accessMode: .read, pathEncoding: nil)
         var base = zipPath ?? ""
         if !base.isEmpty && !base.hasSuffix("/") { base += "/" }
 
         struct ZipChild {
             var isDirectory: Bool
             var size: Int64
+            var modified: Int64
         }
         var children: [String: ZipChild] = [:]
+        var limits = SafeArchiveLimits()
         for item in archive {
+            try limits.include(path: item.path, size: UInt64(item.uncompressedSize), symbolicLink: item.type == .symlink)
             guard item.path.hasPrefix(base) else { continue }
             let remainder = String(item.path.dropFirst(base.count))
             guard !remainder.isEmpty else { continue }
@@ -265,7 +283,8 @@ class FileEntry: Hashable, Equatable {
                 existing.size = max(existing.size, childSize)
                 children[childName] = existing
             } else {
-                children[childName] = ZipChild(isDirectory: directory, size: childSize)
+                children[childName] = ZipChild(isDirectory: directory, size: childSize,
+                    modified: Int64((item.fileAttributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0) * 1000)
             }
             _ = childPath
         }
@@ -278,7 +297,7 @@ class FileEntry: Hashable, Equatable {
                 zipPath: base + name + (child.isDirectory ? "/" : ""),
                 zipDirectory: child.isDirectory,
                 zipSize: child.size,
-                zipModified: 0
+                zipModified: child.modified
             )
         }.sorted { a, b in
             if a.isDirectoryLike() != b.isDirectoryLike() { return a.isDirectoryLike() }
