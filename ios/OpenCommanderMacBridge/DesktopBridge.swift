@@ -68,13 +68,26 @@ final class DesktopBridge: NSObject, DesktopBridgeProtocol {
         }
     }
 
+    func isEjectableVolume(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.volumeURLKey, .volumeIsInternalKey]),
+              url.standardizedFileURL.path.hasPrefix("/Volumes/"),
+              (values.allValues[.volumeURLKey] as? URL)?.standardizedFileURL == url.standardizedFileURL,
+              values.volumeIsInternal != true else { return false }
+        // Disk images may omit Foundation's internal-volume flag. Confirm with
+        // Disk Arbitration metadata instead of treating an unknown flag as safe.
+        guard let data = try? diskUtility(["info", "-plist", url.path]),
+              let info = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any],
+              (info["Internal"] as? Bool) == false,
+              let mountPoint = info["MountPoint"] as? String,
+              URL(fileURLWithPath: mountPoint).standardizedFileURL == url.standardizedFileURL
+        else { return false }
+        return true
+    }
+
     func ejectVolume(_ url: URL, completion: @escaping (NSError?) -> Void) {
         DispatchQueue.global(qos: .utility).async {
             do {
-                let values = try url.resourceValues(forKeys: [.volumeURLKey, .volumeIsInternalKey])
-                guard url.standardizedFileURL.path.hasPrefix("/Volumes/"),
-                      (values.allValues[.volumeURLKey] as? URL)?.standardizedFileURL == url.standardizedFileURL,
-                      values.volumeIsInternal == false else { throw CocoaError(.fileWriteNoPermission) }
+                guard self.isEjectableVolume(url) else { throw CocoaError(.fileWriteNoPermission) }
                 try NSWorkspace.shared.unmountAndEjectDevice(at: url)
                 DispatchQueue.main.async { completion(nil) }
             } catch { DispatchQueue.main.async { completion(error as NSError) } }

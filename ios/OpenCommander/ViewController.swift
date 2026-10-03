@@ -2438,10 +2438,7 @@ extension ViewController: UIDocumentPickerDelegate {
             DispatchQueue.global(qos: .utility).async {
                 let locations = HostFileSystem.availableStorageLocations()
                 let ejectablePaths = Set(locations.compactMap { location -> String? in
-                    guard location.kind != .cloudStorage, location.url.path.hasPrefix("/Volumes/"),
-                          let values = try? location.url.resourceValues(forKeys: [.volumeURLKey, .volumeIsInternalKey]),
-                          values.volumeIsInternal == false,
-                          (values.allValues[.volumeURLKey] as? URL)?.standardizedFileURL == location.url.standardizedFileURL
+                    guard location.kind != .cloudStorage, bridge.isEjectableVolume(location.url)
                     else { return nil }
                     return location.url.path
                 })
