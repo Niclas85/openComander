@@ -249,6 +249,7 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleFileListDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
         doubleTap.cancelsTouchesInView = true
+        doubleTap.delaysTouchesEnded = false
         fileList.addGestureRecognizer(doubleTap)
         
         setupDragAndDrop()
@@ -706,6 +707,10 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
             let entry = visibleEntries[indexPath.row]
             
             cell.configure(with: entry, theme: viewController!.theme, isSelected: selectedKeys.contains(entry.key()))
+            cell.activateEntry = { [weak self, weak tableView] in
+                guard let self, let tableView, let row = self.visibleEntries.firstIndex(where: { $0.key() == entry.key() }) else { return }
+                self.tableView(tableView, didSelectRowAt: IndexPath(row: row, section: 0))
+            }
             cell.isAccessibilityElement = true
             cell.accessibilityIdentifier = "File-\(title)-\(entry.name())"
             cell.accessibilityLabel = entry.name()
@@ -777,6 +782,7 @@ extension CommanderPane {
                     controller.openDesktopFile(entry, chooseApplication: true)
                 },
                 UIAction(title: L10n.get("preview"), image: UIImage(systemName: "eye")) { _ in
+                    controller.activePane = self
                     controller.previewFile(entry)
                 }
             ]
@@ -927,6 +933,12 @@ extension CommanderPane {
 import UIKit
 
 class FileCell: UITableViewCell {
+    var activateEntry: (() -> Void)?
+    override func accessibilityActivate() -> Bool {
+        guard let activateEntry else { return false }
+        activateEntry()
+        return true
+    }
     private static let thumbnails: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 128

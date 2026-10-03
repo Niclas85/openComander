@@ -106,6 +106,28 @@ private final class ImageViewerViewController: UIViewController {
         pageLabel.accessibilityIdentifier = "ImageViewerPage"
         header.contentView.addSubview(pageLabel)
 
+        let navigation = UIStackView()
+        navigation.axis = .horizontal
+        navigation.translatesAutoresizingMaskIntoConstraints = false
+        for (symbol, action, identifier) in [("chevron.left", #selector(previousMedia), "MediaPrevious"),
+                                             ("chevron.right", #selector(nextMedia), "MediaNext")] {
+            let button = UIButton(type: .system)
+            button.setImage(UIImage(systemName: symbol), for: .normal)
+            button.tintColor = .white
+            button.accessibilityIdentifier = identifier
+            button.accessibilityLabel = L10n.get(identifier == "MediaPrevious" ? "back" : "forward")
+            button.addTarget(self, action: action, for: .touchUpInside)
+            button.widthAnchor.constraint(equalToConstant: 44).isActive = true
+            navigation.addArrangedSubview(button)
+        }
+        header.contentView.addSubview(navigation)
+        NSLayoutConstraint.activate([
+            navigation.trailingAnchor.constraint(equalTo: pageLabel.leadingAnchor, constant: -8),
+            navigation.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            navigation.heightAnchor.constraint(equalToConstant: 44),
+            navigation.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 8)])
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
         NSLayoutConstraint.activate([
             header.topAnchor.constraint(equalTo: view.topAnchor),
             header.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -188,10 +210,12 @@ private final class ImageViewerViewController: UIViewController {
         becomeFirstResponder()
     }
     override var keyCommands: [UIKeyCommand]? {
-        [UIKeyCommand(input: UIKeyCommand.inputLeftArrow, modifierFlags: [], action: #selector(previousMedia)),
+        let commands = [UIKeyCommand(input: UIKeyCommand.inputLeftArrow, modifierFlags: [], action: #selector(previousMedia)),
          UIKeyCommand(input: UIKeyCommand.inputRightArrow, modifierFlags: [], action: #selector(nextMedia)),
          UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(closeViewer)),
          UIKeyCommand(input: " ", modifierFlags: [], action: #selector(togglePlayback))]
+        commands.forEach { $0.wantsPriorityOverSystemBehavior = true }
+        return commands
     }
     @objc private func previousMedia() { advanceMedia(-1) }
     @objc private func nextMedia() { advanceMedia(1) }
@@ -794,10 +818,11 @@ class ViewController: UIViewController {
     }
 
     override var keyCommands: [UIKeyCommand]? {
-        if operationInProgress { return [] }
+        if operationInProgress || presentedViewController != nil { return [] }
         // Do not intercept Return, Delete, Cmd-C/V or Space while the user
         // edits a destination path (or a text field in a presented dialog).
         func editingText(in view: UIView) -> Bool {
+            if let field = view as? UITextField, field.isEditing { return true }
             if view.isFirstResponder && view is UITextInput { return true }
             return view.subviews.contains { editingText(in: $0) }
         }

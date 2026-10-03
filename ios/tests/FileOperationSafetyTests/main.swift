@@ -156,3 +156,10 @@ mustFail("ZIP byte limit") {
     try limits.include(path: "extra", size: 1, symbolicLink: false)
 }
 print("PASS: ZIP traversal, duplicate, symlink and expanded-size safety limits")
+let permissionsTarget = try write("permission-guard.txt", "unchanged content")
+try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: permissionsTarget.path)
+let permissionsRecord = FileUndoRecord(source: source, destination: permissionsTarget, replacedBackup: nil)
+try fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: permissionsTarget.path)
+mustFail("metadata-only external change") { try permissionsRecord.undo(move: false) }
+try check(SafeFileOperations.exists(permissionsTarget), "metadata-edited destination retained")
+print("PASS: undo protects external permission changes")
