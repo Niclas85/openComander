@@ -326,6 +326,7 @@ private final class DesktopLocationSettingsViewController: UITableViewController
     var entries: [DesktopLocationPreference]
     var changed: ([DesktopLocationPreference]) -> Void
     var chooseFolder: (@escaping (URL?) -> Void) -> Void
+    var languageChanged: ((String) -> Void)?
 
     init(entries: [DesktopLocationPreference], changed: @escaping ([DesktopLocationPreference]) -> Void,
          chooseFolder: @escaping (@escaping (URL?) -> Void) -> Void) {
@@ -344,11 +345,39 @@ private final class DesktopLocationSettingsViewController: UITableViewController
     }
     @objc private func close() { dismiss(animated: true) }
     private func save() { changed(entries); tableView.reloadData() }
-    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { entries.count }
+    override func numberOfSections(in tableView: UITableView) -> Int { 2 }
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        section == 0 ? 1 : entries.count
+    }
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
-        L10n.get("location_settings_help")
+        section == 1 ? L10n.get("location_settings_help") : nil
     }
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        if indexPath.section == 0 {
+            let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+            cell.textLabel?.text = L10n.get("language")
+            cell.selectionStyle = .none
+            let dropdown = UIButton(type: .system)
+            let selected = UserDefaults.standard.string(forKey: "language") ?? ""
+            let choices = ViewController.languageChoices
+            dropdown.setTitle((choices.first { $0.1 == selected }?.0 ?? L10n.get("language_system")) + " ▾", for: .normal)
+            dropdown.accessibilityIdentifier = "SettingsLanguageDropdown"
+            dropdown.accessibilityLabel = L10n.get("language")
+            dropdown.showsMenuAsPrimaryAction = true
+            dropdown.menu = UIMenu(children: choices.map { name, code in
+                UIAction(title: name, state: code == selected ? .on : .off) { [weak self] _ in
+                    guard let self else { return }
+                    self.languageChanged?(code)
+                    self.title = L10n.get("location_settings")
+                    self.navigationItem.leftBarButtonItem?.title = L10n.get("settings_done")
+                    self.navigationItem.rightBarButtonItem?.title = L10n.get("location_add")
+                    self.tableView.reloadData()
+                }
+            })
+            dropdown.sizeToFit()
+            cell.accessoryView = dropdown
+            return cell
+        }
         let entry = entries[indexPath.row]
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
         cell.textLabel?.text = entry.name; cell.detailTextLabel?.text = entry.path
@@ -366,6 +395,7 @@ private final class DesktopLocationSettingsViewController: UITableViewController
         return cell
     }
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        guard indexPath.section == 1 else { return }
         let entry = entries[indexPath.row]
         let alert = UIAlertController(title: L10n.get("location_rename"), message: entry.path, preferredStyle: .alert)
         alert.addTextField { $0.text = entry.name }
@@ -885,7 +915,7 @@ class ViewController: UIViewController {
         themeRow.addArrangedSubview(darkLabel)
         themeRow.addArrangedSubview(darkSwitch)
         titleRow.addArrangedSubview(themeRow)
-        let headerButtons = [legalButton, languageButton!]
+        let headerButtons = [legalButton]
 #else
         let headerButtons = [helpButton, legalButton, languageButton!]
 #endif
@@ -2360,7 +2390,21 @@ extension ViewController {
     
     @objc func showLanguageDialog() {
         let alert = UIAlertController(title: L10n.get("language"), message: nil, preferredStyle: .actionSheet)
-        let languages = [
+        for lang in Self.languageChoices {
+            alert.addAction(UIAlertAction(title: lang.0, style: .default, handler: { _ in
+                self.applyLanguage(lang.1)
+            }))
+        }
+        alert.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel))
+        if let popover = alert.popoverPresentationController {
+            popover.sourceView = self.languageButton
+            popover.sourceRect = self.languageButton.bounds
+        }
+        self.present(alert, animated: true)
+    }
+
+    static var languageChoices: [(String, String)] {
+        [
             (L10n.get("language_system"), ""),
             ("Deutsch", "de"),
             ("English", "en"),
@@ -2383,19 +2427,12 @@ extension ViewController {
             ("Українська", "uk"),
             ("Svenska", "sv")
         ]
-        for lang in languages {
-            alert.addAction(UIAlertAction(title: lang.0, style: .default, handler: { _ in
-                L10n.currentLanguage = L10n.resolvedLanguage(lang.1 == "" ? Locale.current.identifier : lang.1)
-                UserDefaults.standard.set(lang.1, forKey: "language")
-                self.rebuildApp()
-            }))
-        }
-        alert.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel))
-        if let popover = alert.popoverPresentationController {
-            popover.sourceView = self.languageButton
-            popover.sourceRect = self.languageButton.bounds
-        }
-        self.present(alert, animated: true)
+    }
+
+    func applyLanguage(_ code: String) {
+        L10n.currentLanguage = L10n.resolvedLanguage(code.isEmpty ? Locale.current.identifier : code)
+        UserDefaults.standard.set(code, forKey: "language")
+        rebuildApp()
     }
 
     func rebuildApp(status: String = L10n.get("language_changed")) {
@@ -2663,6 +2700,7 @@ extension ViewController: UIDocumentPickerDelegate {
                 }, chooseFolder: { completion in
                     bridge.chooseLocation(title: L10n.get("location_add"), completion: completion)
                 })
+                settings.languageChanged = { [weak self] code in self?.applyLanguage(code) }
                 let navigation = UINavigationController(rootViewController: settings)
                 navigation.modalPresentationStyle = .formSheet
                 self.present(navigation, animated: true)

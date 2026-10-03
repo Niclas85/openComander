@@ -104,10 +104,16 @@ def test_filter_language_and_theme(window, app):
     assert pane.proxy.rowCount() == 0
     pane.filter.clear()
     assert pane.proxy.rowCount() == 1
-    window.language_combo.setCurrentIndex(0)
+    from opencommander.location_settings import LocationSettingsDialog
+    settings = LocationSettingsDialog(window, window.known_locations)
+    assert not hasattr(window, 'language_combo')
+    settings.language_combo.setCurrentIndex(0)
     assert window.actions['copy'].text() == 'Kopieren'
-    window.language_combo.setCurrentIndex(1)
+    settings.language_combo.setCurrentIndex(1)
     assert window.actions['copy'].text() == 'Copy'
+    assert settings.language_label.text() == 'Language'
+    assert window.settings.value('language') == 'en'
+    settings.close()
     previous = window.dark
     window.toggle_theme()
     assert window.dark != previous

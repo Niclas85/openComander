@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory(prefix='OpenCommander-Demo-') as temp:
     painter.end()
     image.save(str(left / 'Vorschau.png'))
     window = MainWindow(root / 'state', left, right)
-    window.language_combo.setCurrentIndex(0)
+    window.change_language('de')
     window.show()
     deadline = time.monotonic() + 3
     while time.monotonic() < deadline:

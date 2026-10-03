@@ -491,12 +491,6 @@ class MainWindow(QMainWindow):
         header.addWidget(self.mode_label)
         self.mode = ModeToggle()
         header.addWidget(self.mode)
-        self.language_combo = QComboBox()
-        self.language_combo.addItem('Deutsch', 'de')
-        self.language_combo.addItem('English', 'en')
-        self.language_combo.setCurrentIndex(0 if self.language == 'de' else 1)
-        self.language_combo.currentIndexChanged.connect(self.change_language)
-        header.addWidget(self.language_combo)
         self.theme_button = QCheckBox()
         self.theme_button.setChecked(self.dark)
         self.theme_button.clicked.connect(self.toggle_theme)
@@ -1024,12 +1018,13 @@ class MainWindow(QMainWindow):
             pane.tree_model.setFilter(QDir.AllDirs | QDir.NoDotAndDotDot | (QDir.Hidden if self.hidden else QDir.Filter(0)))
         self.refresh_all()
 
-    def change_language(self):
-        self.language = self.language_combo.currentData()
+    def change_language(self, language):
+        self.language = language
         self.settings.setValue('language', self.language)
         self.retranslate()
 
     def retranslate(self):
+        self.location_settings_button.setText('Einstellungen / Orte' if self.language == 'de' else 'Settings / Locations')
         for key, action in self.actions.items():
             action.setText(self.tr_key(key))
             action.setToolTip(self.tr_key(key) + (f' ({action.shortcut().toString()})' if not action.shortcut().isEmpty() else ''))

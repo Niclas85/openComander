@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTableWidget,
-    QTableWidgetItem, QPushButton, QLabel, QFileDialog)
+    QTableWidgetItem, QPushButton, QLabel, QFileDialog, QComboBox)
 
 
 class LocationSettingsDialog(QDialog):
@@ -18,21 +18,51 @@ class LocationSettingsDialog(QDialog):
             if not any(row['path'] == path for row in self.rows):
                 self.rows.append(dict(name=name, path=path, enabled=True, custom=False))
         layout = QVBoxLayout(self)
+        language_row = QHBoxLayout()
+        self.language_label = QLabel('Sprache' if self.de else 'Language')
+        language_row.addWidget(self.language_label)
+        self.language_combo = QComboBox()
+        self.language_combo.setObjectName('SettingsLanguageDropdown')
+        self.language_combo.addItem('Deutsch', 'de')
+        self.language_combo.addItem('English', 'en')
+        self.language_combo.setCurrentIndex(0 if self.de else 1)
+        self.language_combo.currentIndexChanged.connect(self.change_language)
+        language_row.addWidget(self.language_combo)
+        language_row.addStretch()
+        layout.addLayout(language_row)
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels(['Sichtbar', 'Name', 'Pfad'] if self.de else ['Visible', 'Name', 'Path'])
         layout.addWidget(self.table)
-        layout.addWidget(QLabel('Nur Verknüpfungen werden geändert; Dateien bleiben erhalten.' if self.de
-                               else 'Only shortcuts are changed; files are preserved.'))
+        self.help_label = QLabel()
+        layout.addWidget(self.help_label)
         buttons = QHBoxLayout()
+        self.buttons = []
         for title, callback in [('Ordner hinzufügen…' if self.de else 'Add folder…', self.add_folder),
                                 ('Nur Verknüpfung entfernen' if self.de else 'Remove shortcut only', self.remove),
                                 ('Fertig' if self.de else 'Done', self.accept)]:
             button = QPushButton(title)
             button.clicked.connect(callback)
+            self.buttons.append(button)
             buttons.addWidget(button)
         layout.addLayout(buttons)
+        self.retranslate()
         self.refresh()
         self.table.itemChanged.connect(self.save)
+
+    def change_language(self):
+        self.main.change_language(self.language_combo.currentData())
+        self.de = self.main.language == 'de'
+        self.retranslate()
+
+    def retranslate(self):
+        self.setWindowTitle('Einstellungen / Orte' if self.de else 'Settings / Locations')
+        self.language_label.setText('Sprache' if self.de else 'Language')
+        self.table.setHorizontalHeaderLabels(['Sichtbar', 'Name', 'Pfad'] if self.de else ['Visible', 'Name', 'Path'])
+        self.help_label.setText('Nur Verknüpfungen werden geändert; Dateien bleiben erhalten.' if self.de
+                               else 'Only shortcuts are changed; files are preserved.')
+        titles = ['Ordner hinzufügen…', 'Nur Verknüpfung entfernen', 'Fertig'] if self.de else ['Add folder…', 'Remove shortcut only', 'Done']
+        for button, title in zip(self.buttons, titles):
+            button.setText(title)
 
     def refresh(self):
         self.table.blockSignals(True)
