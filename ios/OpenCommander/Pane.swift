@@ -544,6 +544,15 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
                     self.viewController?.openSyncApplication(for: self.currentDirectory.url)
                 }, for: .touchUpInside)
                 stack.addArrangedSubview(reconnect)
+                if HostFileSystem.cloudClientName(for: currentDirectory.url) == "OneDrive" {
+                    let online = UIButton(type: .system)
+                    online.setTitle(L10n.get("onedrive_open_online"), for: .normal)
+                    online.accessibilityIdentifier = "OpenOneDriveOnline-\(title)"
+                    online.addAction(UIAction { [weak self] _ in
+                        self?.viewController?.openOneDriveOnline()
+                    }, for: .touchUpInside)
+                    stack.addArrangedSubview(online)
+                }
             }
 #endif
         }

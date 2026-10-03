@@ -2743,6 +2743,14 @@ extension ViewController: UIDocumentPickerDelegate {
         }
     }
 
+    func openOneDriveOnline() {
+        guard let bridge = DesktopBridge.shared,
+              let url = URL(string: "https://onedrive.live.com/") else { return }
+        bridge.openFile(url, application: nil) { [weak self] opened, error in
+            self?.updateGlobalStatus(error?.localizedDescription ?? L10n.get(opened ? "onedrive_online_opened" : "file_open_failed"))
+        }
+    }
+
     @objc func showConnections() {
         guard !operationInProgress, presentedViewController == nil, let bridge = DesktopBridge.shared else { return }
         updateGlobalStatus(L10n.get("connections_loading"))
