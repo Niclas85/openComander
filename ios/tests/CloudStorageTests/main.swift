@@ -17,6 +17,25 @@ func check(_ condition: @autoclosure () -> Bool, _ message: String) {
 let google = try directory("Library/CloudStorage/GoogleDrive-test@example.invalid")
 let myDrive = try directory("Library/CloudStorage/GoogleDrive-test@example.invalid/Meine Ablage")
 let oneDrive = try directory("Library/CloudStorage/OneDrive-Personal")
+check(HostFileSystem.cloudClientName(for: oneDrive) == "OneDrive", "OneDrive provider recovery action")
+check(HostFileSystem.cloudClientName(for: google) == "Google Drive", "Google provider recovery action")
+let settingsSuite = "OpenCommander-Locations-Test-" + UUID().uuidString
+let isolatedDefaults = UserDefaults(suiteName: settingsSuite)!
+defer { isolatedDefaults.removePersistentDomain(forName: settingsSuite) }
+let preference = DesktopLocationPreference(path: oneDrive.path, name: "My renamed drive", enabled: false, custom: true)
+DesktopLocationPreferences.save([preference], to: isolatedDefaults)
+let restoredPreferences = DesktopLocationPreferences.load(from: isolatedDefaults)
+check(restoredPreferences.count == 1 && restoredPreferences[0].name == "My renamed drive" && !restoredPreferences[0].enabled,
+      "Location names, visibility and custom shortcuts persist")
+let coordinatedName = try HostFileSystem.coordinatedRead(at: oneDrive) { $0.lastPathComponent }
+check(coordinatedName == oneDrive.lastPathComponent, "Coordinated archive input uses the granted URL")
+print("PASS persisted location configuration and coordinated provider input")
+check(HostFileSystem.isDisabledProvider(NSError(domain: "NSFileProviderErrorDomain", code: -2011)), "Disabled OneDrive domain is diagnosed")
+check(!HostFileSystem.isDisabledProvider(NSError(domain: "NSFileProviderErrorDomain", code: -2012)), "Transient error is not falsely reported as disabled")
+do {
+    _ = try HostFileSystem.coordinatedRead(at: oneDrive) { _ -> String in throw CocoaError(.fileReadNoPermission) }
+    fatalError("FAIL: provider errors must propagate")
+} catch { check((error as NSError).code == CocoaError.fileReadNoPermission.rawValue, "coordinated error retained") }
 _ = try directory("Library/CloudStorage/OneDrive-Company")
 _ = try directory("Library/CloudStorage/Dropbox-Personal")
 _ = try directory("Library/CloudStorage/AnotherProvider-Account")

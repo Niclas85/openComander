@@ -321,6 +321,84 @@ private final class ImageViewerViewController: UIViewController {
 }
 
 
+#if targetEnvironment(macCatalyst)
+private final class DesktopLocationSettingsViewController: UITableViewController {
+    var entries: [DesktopLocationPreference]
+    var changed: ([DesktopLocationPreference]) -> Void
+    var chooseFolder: (@escaping (URL?) -> Void) -> Void
+
+    init(entries: [DesktopLocationPreference], changed: @escaping ([DesktopLocationPreference]) -> Void,
+         chooseFolder: @escaping (@escaping (URL?) -> Void) -> Void) {
+        self.entries = entries; self.changed = changed; self.chooseFolder = chooseFolder
+        super.init(style: .insetGrouped)
+        title = L10n.get("location_settings")
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title: L10n.get("settings_done"), style: .done,
+            target: self, action: #selector(close))
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: L10n.get("location_add"), style: .plain,
+            target: self, action: #selector(addLocation))
+        tableView.accessibilityIdentifier = "LocationSettingsList"
+    }
+    @objc private func close() { dismiss(animated: true) }
+    private func save() { changed(entries); tableView.reloadData() }
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { entries.count }
+    override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
+        L10n.get("location_settings_help")
+    }
+    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let entry = entries[indexPath.row]
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        cell.textLabel?.text = entry.name; cell.detailTextLabel?.text = entry.path
+        cell.accessibilityIdentifier = "LocationSetting-\(entry.path)"
+        let toggle = UISwitch()
+        toggle.isOn = entry.enabled
+        toggle.accessibilityLabel = entry.name
+        toggle.accessibilityIdentifier = "LocationVisible-\(entry.path)"
+        toggle.addAction(UIAction { [weak self, weak toggle] _ in
+            guard let self, let index = self.entries.firstIndex(where: { $0.path == entry.path }) else { return }
+            self.entries[index].enabled = toggle?.isOn == true
+            self.save()
+        }, for: .valueChanged)
+        cell.accessoryView = toggle
+        return cell
+    }
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        let entry = entries[indexPath.row]
+        let alert = UIAlertController(title: L10n.get("location_rename"), message: entry.path, preferredStyle: .alert)
+        alert.addTextField { $0.text = entry.name }
+        alert.addAction(UIAlertAction(title: L10n.get("settings_save"), style: .default) { [weak self] _ in
+            guard let self, let name = alert.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !name.isEmpty, let index = self.entries.firstIndex(where: { $0.path == entry.path }) else { return }
+            self.entries[index].name = name; self.save()
+        })
+        if entry.custom {
+            alert.addAction(UIAlertAction(title: L10n.get("location_remove"), style: .destructive) { [weak self] _ in
+                self?.entries.removeAll { $0.path == entry.path }; self?.save()
+            })
+        }
+        alert.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel))
+        present(alert, animated: true)
+    }
+    @objc private func addLocation() {
+        chooseFolder { [weak self] url in
+            guard let self, let url else { return }
+            let scope = url.startAccessingSecurityScopedResource()
+            defer { if scope { url.stopAccessingSecurityScopedResource() } }
+            let canonical = url.resolvingSymlinksInPath().standardizedFileURL
+            if !self.entries.contains(where: { $0.path == canonical.path }) {
+                self.entries.append(DesktopLocationPreference(path: canonical.path, name: canonical.lastPathComponent,
+                    enabled: true, custom: true,
+                    bookmark: try? url.bookmarkData(options: [.minimalBookmark], includingResourceValuesForKeys: nil, relativeTo: nil)))
+                self.save()
+            }
+        }
+    }
+}
+#endif
+
 private final class CompactActionToolbar: UIView {
     private let buttons: [UIButton]
     private let gap: CGFloat = 2
@@ -830,6 +908,10 @@ class ViewController: UIViewController {
         preferencesButton.accessibilityIdentifier = "FolderDefaultButton"
         preferencesButton.addTarget(self, action: #selector(showFolderDefaultPreferences), for: .touchUpInside)
         titleRow.addArrangedSubview(preferencesButton)
+        let settingsButton = miniButton(label: L10n.get("location_settings"))
+        settingsButton.accessibilityIdentifier = "LocationSettingsButton"
+        settingsButton.addTarget(self, action: #selector(showLocationSettings), for: .touchUpInside)
+        titleRow.addArrangedSubview(settingsButton)
 #else
         openFolderButton = miniButton(label: L10n.get("choose_folder"))
 #endif
@@ -857,6 +939,16 @@ class ViewController: UIViewController {
         }
         let toolbar = CompactActionToolbar(buttons: [renameButton, extraButtons[0], deleteButton, zipButton,
             extraButtons[1], extraButtons[2], undoButton, historyButton, helpButton, extraButtons[3]])
+        for button in [renameButton, extraButtons[2]].compactMap({ $0 }) {
+            tintButton(button: button, lightFill: "#e8f1ff", lightStroke: "#185bb5", lightText: "#185bb5",
+                darkFill: "#1f344d", darkStroke: "#88baff", darkText: "#88baff")
+        }
+        tintButton(button: extraButtons[0], lightFill: "#e9f8ef", lightStroke: "#147454", lightText: "#147454",
+            darkFill: "#173f2a", darkStroke: "#79dcb9", darkText: "#79dcb9")
+        for button in [zipButton, extraButtons[1], undoButton].compactMap({ $0 }) {
+            tintButton(button: button, lightFill: "#fff4d8", lightStroke: "#946400", lightText: "#946400",
+                darkFill: "#4b3514", darkStroke: "#e3b65d", darkText: "#e3b65d")
+        }
         toolbar.accessibilityIdentifier = "ActionToolbar"
         desktopActionToolbar = toolbar
         topBar.addArrangedSubview(toolbar)
@@ -923,6 +1015,7 @@ class ViewController: UIViewController {
             key(L10n.get("preview"), "y", command, #selector(previewSelectedEntry)),
             key(L10n.get("open"), "\r", [], #selector(openSelectedEntry)),
             key(L10n.get("help"), UIKeyCommand.f1, [], #selector(showHelpDialog)),
+            key(L10n.get("location_settings"), ",", command, #selector(showLocationSettings)),
             key(L10n.get("duplicate"), "d", command, #selector(duplicateSelection)),
             key(L10n.get("file_info"), "i", command, #selector(showFileInfo)),
             key(L10n.get("move_to_trash"), UIKeyCommand.inputDelete, command, #selector(moveSelectionToTrash)),
@@ -969,7 +1062,11 @@ class ViewController: UIViewController {
     }
 
     private func miniButton(label: String) -> UIButton {
+#if targetEnvironment(macCatalyst)
+        let button = UIButton(type: .custom)
+#else
         let button = UIButton(type: .system)
+#endif
         button.setTitle(label, for: .normal)
         button.titleLabel?.font = UIFont.systemFont(ofSize: 14)
         button.titleLabel?.numberOfLines = 0
@@ -1004,11 +1101,6 @@ class ViewController: UIViewController {
     }
 
     private func tintButton(button: UIButton, lightFill: String, lightStroke: String, lightText: String, darkFill: String, darkStroke: String, darkText: String) {
-#if targetEnvironment(macCatalyst)
-        button.backgroundColor = theme.buttonBackground
-        button.layer.borderColor = theme.buttonBorder.cgColor
-        button.setTitleColor(button === deleteButton ? .systemRed : theme.buttonText, for: .normal)
-#else
         let fill = darkMode ? darkFill : lightFill
         let stroke = darkMode ? darkStroke : lightStroke
         let text = darkMode ? darkText : lightText
@@ -1016,7 +1108,6 @@ class ViewController: UIViewController {
         button.backgroundColor = UIColor(hex: fill)
         button.layer.borderColor = UIColor(hex: stroke).cgColor
         button.setTitleColor(UIColor(hex: text), for: .normal)
-#endif
     }
 }
 
@@ -1116,13 +1207,28 @@ private extension ViewController {
         }
 
         var addedPaths = Set<String>()
+        let preferences = DesktopLocationPreferences.load()
+        for entry in preferences where entry.custom && entry.enabled {
+            var url = URL(fileURLWithPath: entry.path, isDirectory: true)
+            if let bookmark = entry.bookmark {
+                var stale = false
+                if let restored = try? URL(resolvingBookmarkData: bookmark, options: [.withoutUI], relativeTo: nil,
+                    bookmarkDataIsStale: &stale) {
+                    url = restored
+                    if !securityScopedURLs.contains(url), url.startAccessingSecurityScopedResource() { securityScopedURLs.append(url) }
+                }
+            }
+            locations.append((entry.name, url, L10n.get("choose_folder")))
+        }
         let connections = miniButton(label: L10n.get("connections"))
         connections.accessibilityIdentifier = "DesktopAction-connections"
         connections.addTarget(self, action: #selector(showConnections), for: .touchUpInside)
         stack.addArrangedSubview(connections)
         for location in locations where addedPaths.insert(location.url.standardizedFileURL.path).inserted {
+            let preference = preferences.first { $0.path == location.url.resolvingSymlinksInPath().standardizedFileURL.path }
+            if preference?.enabled == false { continue }
             let button = UIButton(type: .system)
-            button.setTitle(location.name, for: .normal)
+            button.setTitle(preference?.name ?? location.name, for: .normal)
             button.setTitleColor(theme.primaryText, for: .normal)
             button.titleLabel?.font = .systemFont(ofSize: 11, weight: .medium)
             button.backgroundColor = theme.buttonBackground
@@ -1982,9 +2088,8 @@ extension ViewController {
     @objc func createZipFromCurrentSelection() {
         // ZIP uses one pane, matching Android; selections in the other pane
         // must not unexpectedly add unrelated files to the archive.
-        let pane = [activePane, leftPane, rightPane].compactMap { $0 }
-            .first { !$0.selectedKeys.isEmpty }
-        let panes = pane.map { [$0] } ?? []
+        guard !operationInProgress, presentedViewController == nil else { return }
+        let pane = activePane ?? leftPane
         let sources = pane?.selectedEntries() ?? []
         if sources.isEmpty {
             updateGlobalStatus(L10n.get("zip_no_selection"))
@@ -1994,6 +2099,24 @@ extension ViewController {
             updateGlobalStatus(L10n.get("zip_read_only"))
             return
         }
+#if targetEnvironment(macCatalyst)
+        guard let bridge = DesktopBridge.shared else { return }
+        bridge.chooseArchiveDestination(name: archiveName(for: sources),
+            directory: pane?.currentDirectory.url ?? HostFileSystem.downloadsDirectory,
+            title: L10n.get("zip_save_title")) { [weak self] destination in
+            guard let self, let destination else { return }
+            guard !sources.contains(where: { $0.url.standardizedFileURL == destination.standardizedFileURL }) else {
+                self.updateGlobalStatus(L10n.get("zip_source_destination")); return
+            }
+            self.performZipCreation(sources: sources, pane: pane, destination: destination)
+        }
+#else
+        performZipCreation(sources: sources, pane: pane, destination: nil)
+#endif
+    }
+
+    private func performZipCreation(sources: [FileEntry], pane: CommanderPane?, destination: URL?) {
+        let panes = pane.map { [$0] } ?? []
         showProgress(String(format: L10n.get("zip_creating"), sources.count), progress: 0)
         
         DispatchQueue.global(qos: .userInitiated).async {
@@ -2008,16 +2131,22 @@ extension ViewController {
                 // zipping Documents into Documents must never include the new ZIP.
                 var entries: [(path: String, url: URL)] = []
                 var pending = sources.map { (path: $0.name(), url: $0.url) }
+                var limits = SafeArchiveLimits()
                 while let entry = pending.popLast() {
+                    let metadata = try HostFileSystem.coordinatedRead(at: entry.url) { url -> (URLResourceValues, [String]) in
+                        let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey])
+                        let children = values.isDirectory == true && values.isSymbolicLink != true
+                            ? try fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil).map(\.lastPathComponent) : []
+                        return (values, children)
+                    }
+                    try limits.include(path: entry.path, size: UInt64(max(0, metadata.0.isDirectory == true ? 0 : (metadata.0.fileSize ?? 0))),
+                        symbolicLink: metadata.0.isSymbolicLink == true)
                     entries.append(entry)
-                    let values = try entry.url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
-                    if values.isDirectory == true && values.isSymbolicLink != true {
-                        let children = try fm.contentsOfDirectory(at: entry.url,
-                            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey])
-                        for child in children {
+                    if metadata.0.isDirectory == true {
+                        for name in metadata.1 {
                             // Build archive paths from names, never by subtracting
                             // /var vs /private/var filesystem URL prefixes.
-                            pending.append((entry.path + "/" + child.lastPathComponent, child))
+                            pending.append((entry.path + "/" + name, entry.url.appendingPathComponent(name)))
                         }
                     }
                 }
@@ -2027,7 +2156,9 @@ extension ViewController {
                     let archive = try Archive(url: stagedArchive, accessMode: .create, pathEncoding: nil)
                     for (index, entry) in entries.enumerated() {
                         // Keep the actual source URL separate from the ZIP entry name.
-                        try archive.addEntry(with: entry.path, fileURL: entry.url)
+                        try HostFileSystem.coordinatedRead(at: entry.url) { url in
+                            try archive.addEntry(with: entry.path, fileURL: url, compressionMethod: .deflate)
+                        }
                         let progress = Int(Double(index + 1) / Double(entries.count) * 100)
                         DispatchQueue.main.async { self.updateProgress(progress: progress) }
                     }
@@ -2047,7 +2178,20 @@ extension ViewController {
                 }
                 let archiveURL: URL
                 let usedDocuments: Bool
-                do {
+                var replacedBackup: URL?
+                if let destination {
+                    var coordinationError: NSError?
+                    var result: Result<URL?, Error>?
+                    NSFileCoordinator().coordinate(writingItemAt: destination, options: .forReplacing, error: &coordinationError) { url in
+                        result = Result { try SafeFileOperations.copyReplacing(source: stagedArchive, destination: url,
+                            replace: SafeFileOperations.exists(url)) }
+                    }
+                    if let coordinationError { throw coordinationError }
+                    guard let result else { throw CocoaError(.fileWriteUnknown) }
+                    replacedBackup = try result.get()
+                    archiveURL = destination
+                    usedDocuments = false
+                } else { do {
                     archiveURL = try publish(in: parentDir)
                     usedDocuments = false
                 } catch {
@@ -2057,8 +2201,8 @@ extension ViewController {
                     // container root. Publish it inside the writable Documents folder.
                     archiveURL = try publish(in: documents)
                     usedDocuments = true
-                }
-                let record = FileUndoRecord(source: archiveURL, destination: archiveURL, replacedBackup: nil)
+                } }
+                let record = FileUndoRecord(source: archiveURL, destination: archiveURL, replacedBackup: replacedBackup)
                 DispatchQueue.main.async {
                     self.operationHistory.append(.zip(record: record))
                     if usedDocuments { pane?.openDirectory(FileEntry(url: documents, parent: nil)) }
@@ -2497,6 +2641,44 @@ extension ViewController: UIDocumentPickerDelegate {
 #endif
 
 #if targetEnvironment(macCatalyst)
+    @objc func showLocationSettings() {
+        guard !operationInProgress, presentedViewController == nil, let bridge = DesktopBridge.shared else { return }
+        DispatchQueue.global(qos: .utility).async {
+            let locations = HostFileSystem.availableStorageLocations()
+            var entries = DesktopLocationPreferences.load()
+            let builtins = [(L10n.get("mac_location"), URL(fileURLWithPath: "/", isDirectory: true)),
+                (L10n.get("home_folder"), HostFileSystem.homeDirectory),
+                (L10n.get("downloads_folder"), HostFileSystem.downloadsDirectory)] + locations.map { ($0.name, $0.url) }
+            for (name, url) in builtins {
+                let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+                if !entries.contains(where: { $0.path == path }) {
+                    entries.append(DesktopLocationPreference(path: path, name: name, enabled: true, custom: false))
+                }
+            }
+            DispatchQueue.main.async {
+                guard self.presentedViewController == nil, !self.operationInProgress else { return }
+                let settings = DesktopLocationSettingsViewController(entries: entries, changed: { [weak self] entries in
+                    DesktopLocationPreferences.save(entries)
+                    self?.reloadStorageLocationsBar()
+                }, chooseFolder: { completion in
+                    bridge.chooseLocation(title: L10n.get("location_add"), completion: completion)
+                })
+                let navigation = UINavigationController(rootViewController: settings)
+                navigation.modalPresentationStyle = .formSheet
+                self.present(navigation, animated: true)
+            }
+        }
+    }
+
+    func openSyncApplication(for url: URL) {
+        guard let name = HostFileSystem.cloudClientName(for: url), let bridge = DesktopBridge.shared,
+              let application = bridge.installedCloudApplications().first(where: { $0["name"] == name }),
+              let path = application["path"] else { return }
+        bridge.openFile(URL(fileURLWithPath: path), application: nil) { [weak self] _, error in
+            self?.updateGlobalStatus(error?.localizedDescription ?? L10n.get("cloud_client_opened"))
+        }
+    }
+
     @objc func showConnections() {
         guard !operationInProgress, presentedViewController == nil, let bridge = DesktopBridge.shared else { return }
         updateGlobalStatus(L10n.get("connections_loading"))

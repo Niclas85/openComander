@@ -1,10 +1,45 @@
 import Foundation
 
+struct DesktopLocationPreference: Codable {
+    var path: String
+    var name: String
+    var enabled: Bool
+    var custom: Bool
+    var bookmark: Data?
+}
+
+enum DesktopLocationPreferences {
+    static func load(from defaults: UserDefaults = .standard) -> [DesktopLocationPreference] {
+        guard let data = defaults.data(forKey: "desktop_locations_v1") else { return [] }
+        return (try? JSONDecoder().decode([DesktopLocationPreference].self, from: data)) ?? []
+    }
+
+    static func save(_ entries: [DesktopLocationPreference], to defaults: UserDefaults = .standard) {
+        if let data = try? JSONEncoder().encode(entries) { defaults.set(data, forKey: "desktop_locations_v1") }
+    }
+}
+
 #if targetEnvironment(macCatalyst) || os(macOS)
 import Darwin
 #endif
 
 enum HostFileSystem {
+    static func coordinatedRead<T>(at url: URL, _ read: (URL) throws -> T) throws -> T {
+#if targetEnvironment(macCatalyst) || os(macOS)
+        let scope = url.startAccessingSecurityScopedResource()
+        defer { if scope { url.stopAccessingSecurityScopedResource() } }
+        var coordinationError: NSError?
+        var result: Result<T, Error>?
+        NSFileCoordinator().coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinationError) { coordinatedURL in
+            result = Result { try read(coordinatedURL) }
+        }
+        if let coordinationError { throw coordinationError }
+        guard let result else { throw CocoaError(.fileReadUnknown) }
+        return try result.get()
+#else
+        return try read(url)
+#endif
+    }
     enum StorageKind {
         case externalDrive
         case networkShare
@@ -213,6 +248,22 @@ enum HostFileSystem {
         }
 #endif
         return try read(url)
+    }
+
+    static func cloudClientName(for url: URL) -> String? {
+        let components = url.standardizedFileURL.pathComponents
+        for (prefix, name) in [("OneDrive", "OneDrive"), ("GoogleDrive", "Google Drive"),
+                               ("Dropbox", "Dropbox"), ("Box-", "Box")] {
+            if components.contains(where: { $0.hasPrefix(prefix) }) { return name }
+        }
+        return nil
+    }
+
+    static func isDisabledProvider(_ error: NSError) -> Bool {
+        // NSFileProviderErrorDomainDisabled: the OS reports a user-disabled domain.
+        if error.domain == "NSFileProviderErrorDomain" && error.code == -2011 { return true }
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError { return isDisabledProvider(underlying) }
+        return false
     }
 
     private static func cloudDisplayName(_ directoryName: String) -> String {

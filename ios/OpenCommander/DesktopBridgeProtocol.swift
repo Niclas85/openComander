@@ -12,6 +12,8 @@ protocol DesktopBridgeProtocol {
     func isEjectableVolume(_ url: URL) -> Bool
     func ejectVolume(_ url: URL, completion: @escaping (NSError?) -> Void)
     func installedCloudApplications() -> [[String: String]]
+    func chooseArchiveDestination(name: String, directory: URL, title: String, completion: @escaping (URL?) -> Void)
+    func chooseLocation(title: String, completion: @escaping (URL?) -> Void)
 }
 #endif
 

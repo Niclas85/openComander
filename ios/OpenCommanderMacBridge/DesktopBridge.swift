@@ -5,6 +5,37 @@ import UniformTypeIdentifiers
 /// NSWorkspace APIs, the same Launch Services associations as Finder, no shell.
 final class DesktopBridge: NSObject, DesktopBridgeProtocol {
     private var applicationPanel: NSOpenPanel?
+    private var locationPanel: NSOpenPanel?
+    private var archivePanel: NSSavePanel?
+
+    func chooseArchiveDestination(name: String, directory: URL, title: String, completion: @escaping (URL?) -> Void) {
+        guard archivePanel == nil else { completion(nil); return }
+        let panel = NSSavePanel()
+        archivePanel = panel
+        panel.title = title
+        panel.allowedContentTypes = [.zip]
+        panel.nameFieldStringValue = name
+        panel.directoryURL = directory
+        panel.canCreateDirectories = true
+        panel.begin { [weak self] response in
+            self?.archivePanel = nil
+            completion(response == .OK ? panel.url : nil)
+        }
+    }
+
+    func chooseLocation(title: String, completion: @escaping (URL?) -> Void) {
+        guard locationPanel == nil else { completion(nil); return }
+        let panel = NSOpenPanel()
+        locationPanel = panel
+        panel.title = title
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.begin { [weak self] response in
+            self?.locationPanel = nil
+            completion(response == .OK ? panel.url : nil)
+        }
+    }
 
     private func diskUtility(_ arguments: [String]) throws -> Data {
         let task = Process()

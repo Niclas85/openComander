@@ -462,7 +462,10 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
             allEntries.removeAll()
             currentDirectoryBytes = -2
 #if targetEnvironment(macCatalyst)
-            let message = String(format: L10n.get("directory_error"), error.localizedDescription)
+            let message = HostFileSystem.cloudClientName(for: currentDirectory.url).map {
+                String(format: L10n.get(HostFileSystem.isDisabledProvider(error as NSError)
+                    ? "cloud_domain_disabled" : "cloud_unavailable"), $0) + "\n" + error.localizedDescription
+            } ?? String(format: L10n.get("directory_error"), error.localizedDescription)
 #else
             let message = L10n.get("storage_tree_failed") + "\n" + error.localizedDescription + "\n\n" + L10n.get("help_access_ios")
 #endif
@@ -531,6 +534,17 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
                 self.viewController?.showComputerLocations()
             }, for: .touchUpInside)
             stack.addArrangedSubview(chooseButton)
+#else
+            if HostFileSystem.cloudClientName(for: currentDirectory.url) != nil {
+                let reconnect = UIButton(type: .system)
+                reconnect.setTitle(L10n.get("cloud_setup"), for: .normal)
+                reconnect.accessibilityIdentifier = "OpenSyncClient-\(title)"
+                reconnect.addAction(UIAction { [weak self] _ in
+                    guard let self else { return }
+                    self.viewController?.openSyncApplication(for: self.currentDirectory.url)
+                }, for: .touchUpInside)
+                stack.addArrangedSubview(reconnect)
+            }
 #endif
         }
         NSLayoutConstraint.activate([

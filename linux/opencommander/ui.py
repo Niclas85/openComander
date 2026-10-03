@@ -26,6 +26,7 @@ from .i18n import text
 from . import __version__
 from .media import media_kind, ThumbnailCache, MediaViewer
 from .controls import ModeToggle
+from .location_preferences import load_preferences, configured_locations
 from shiboken6 import isValid
 
 
@@ -456,6 +457,7 @@ class MainWindow(QMainWindow):
         self.state_dir = Path(state_dir)
         self.engine = FileEngine(self.state_dir)
         self.settings = QSettings(str(self.state_dir / 'settings.ini'), QSettings.IniFormat)
+        self.location_preferences = load_preferences(self.settings.value('locations', '[]'))
         locale = os.environ.get('LANG', 'en')
         self.language = str(self.settings.value('language', 'de' if locale.startswith('de') else 'en'))
         self.dark = self.settings.value('dark', True, type=bool)
@@ -499,6 +501,13 @@ class MainWindow(QMainWindow):
         self.theme_button.setChecked(self.dark)
         self.theme_button.clicked.connect(self.toggle_theme)
         header.addWidget(self.theme_button)
+        self.location_settings_button = QPushButton('Einstellungen / Orte' if self.language == 'de' else 'Settings / Locations')
+        self.location_settings_button.clicked.connect(self.location_settings)
+        header.addWidget(self.location_settings_button)
+        location_settings_action = QAction(self)
+        location_settings_action.setShortcut(QKeySequence('Ctrl+,'))
+        location_settings_action.triggered.connect(self.location_settings)
+        self.addAction(location_settings_action)
         layout.addLayout(header)
         self.actions = {}
         callbacks = {
@@ -1074,6 +1083,8 @@ class MainWindow(QMainWindow):
             locations.append((self.tr_key('downloads'), downloads))
         locations += [(path.name, path) for path in mounted_locations() + cloud_locations()]
         locations += [(item['name'], Path(item['path'])) for item in self.integration_locations if item['path']]
+        self.known_locations = locations
+        locations = [(name, Path(path)) for name, path in configured_locations(locations, self.location_preferences)]
         connect = QPushButton('Verbindungen …' if self.language == 'de' else 'Connections …')
         connect.clicked.connect(self.connections)
         self.places.addWidget(connect)
@@ -1088,6 +1099,13 @@ class MainWindow(QMainWindow):
             button.clicked.connect(lambda checked=False, path=path: self.active.navigate(path))
             self.places.addWidget(button)
         self.places.addStretch()
+
+    def location_settings(self):
+        if self.busy:
+            return
+        from .location_settings import LocationSettingsDialog
+        self.location_settings_dialog = LocationSettingsDialog(self, getattr(self, 'known_locations', []))
+        self.location_settings_dialog.exec()
 
     def toggle_theme(self):
         self.dark = not self.dark
