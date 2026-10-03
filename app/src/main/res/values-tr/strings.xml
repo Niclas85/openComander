@@ -125,4 +125,7 @@
     <string name="zip_failed">ZIP başarısız: %1$s</string>
     <string name="zip_detail">ZIP arşivi</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">Geri alma durduruldu: Dosyalar değişti veya doğrulanamıyor. Başka dosya silinmeyecek.</string>
+    <string name="move_cleanup_failed">Kaynak tamamen silinemedi. Tam kopya şurada korundu: %1$s</string>
+    <string name="recovery_retained">Kurtarma dosyaları şurada korundu: %1$s</string>
 </resources>

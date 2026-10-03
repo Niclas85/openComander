@@ -124,4 +124,7 @@
     <string name="zip_failed">ZIP विफल रहा: %1$s</string>
     <string name="zip_detail">ZIP संग्रह</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">पूर्ववत करना रोका गया: फ़ाइलें बदल गई हैं या जाँची नहीं जा सकतीं। आगे कोई फ़ाइल नहीं हटाई जाएगी।</string>
+    <string name="move_cleanup_failed">स्रोत पूरी तरह नहीं हटाया जा सका। पूरी प्रतिलिपि यहाँ सुरक्षित है: %1$s</string>
+    <string name="recovery_retained">पुनर्प्राप्ति फ़ाइलें यहाँ सुरक्षित हैं: %1$s</string>
 </resources>

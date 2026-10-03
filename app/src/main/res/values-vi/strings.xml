@@ -125,4 +125,7 @@
     <string name="zip_failed">Tạo ZIP thất bại: %1$s</string>
     <string name="zip_detail">Kho lưu trữ ZIP</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">Đã dừng hoàn tác: tệp đã thay đổi hoặc không thể xác minh. Sẽ không xóa thêm tệp nào.</string>
+    <string name="move_cleanup_failed">Không thể xóa toàn bộ nguồn. Bản sao đầy đủ được giữ tại: %1$s</string>
+    <string name="recovery_retained">Các tệp khôi phục được giữ tại: %1$s</string>
 </resources>

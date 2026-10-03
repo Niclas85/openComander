@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5AFE00000000000000000001 /* FileOperationSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AFE00000000000000000002 /* FileOperationSafety.swift */; };
         A66000000000000000000001 = {isa = PBXBuildFile; fileRef = A66000000000000000000011; };
         A66000000000000000000002 = {isa = PBXBuildFile; fileRef = A66000000000000000000011; };
         A66000000000000000000003 = {isa = PBXBuildFile; fileRef = A66000000000000000000012; };
@@ -81,6 +82,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		5AFE00000000000000000002 /* FileOperationSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileOperationSafety.swift; sourceTree = "<group>"; };
         A66000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopBridgeProtocol.swift; sourceTree = "<group>"; };
         A66000000000000000000012 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCommanderMacBridge/DesktopBridge.swift; sourceTree = SOURCE_ROOT; };
         A66000000000000000000013 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = OpenCommanderMacBridge.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -163,6 +165,7 @@
 				4CADCE370033D94E97C19D6C /* Assets.xcassets */,
 				556918D3DC87DF614F200378 /* FileEntry.swift */,
 				DAD000000000000000000002 /* FileDropTransfer.swift */,
+				5AFE00000000000000000002 /* FileOperationSafety.swift */,
                 IMG000000000000000000002 /* ImagePreviewLoader.swift */,
 				177BF22CC72C73144BF8A901 /* Localization-ar.json */,
 				E5C5B68809E3A9A3AA0D48DC /* Localization-hi.json */,
@@ -422,6 +425,7 @@
 				D78142BF3E7FB6427ADC9A63 /* AppDelegate.swift in Sources */,
 				510EFA53657E909B5C734B36 /* FileEntry.swift in Sources */,
 				DAD000000000000000000001 /* FileDropTransfer.swift in Sources */,
+				5AFE00000000000000000001 /* FileOperationSafety.swift in Sources */,
                 A66000000000000000000001,
                 IMG000000000000000000001 /* ImagePreviewLoader.swift in Sources */,
 				4A64E77E26EC97CD38490ED8 /* Localization.swift in Sources */,

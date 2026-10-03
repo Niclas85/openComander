@@ -124,4 +124,7 @@
     <string name="zip_failed">Falha ao criar ZIP: %1$s</string>
     <string name="zip_detail">Arquivo ZIP</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">Anulação interrompida: os arquivos mudaram ou não podem ser verificados. Nenhum outro arquivo será removido.</string>
+    <string name="move_cleanup_failed">Não foi possível excluir toda a origem. A cópia completa foi preservada em: %1$s</string>
+    <string name="recovery_retained">Os arquivos de recuperação foram preservados em: %1$s</string>
 </resources>

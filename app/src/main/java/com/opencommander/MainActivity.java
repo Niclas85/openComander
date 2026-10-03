@@ -85,6 +85,7 @@ public class MainActivity extends Activity {
     private CommanderPane activeDragPane;
     private Switch darkModeSwitch;
     private Button undoButton;
+    private boolean operationInProgress;
     private Button renameButton;
     private Button zipButton;
     private Button deleteButton;
@@ -808,6 +809,7 @@ public class MainActivity extends Activity {
     }
 
     private void createZipFromCurrentSelection() {
+        if (operationInProgress) return;
         CommanderPane pane = activePane != null && !activePane.selectedKeys.isEmpty() ? activePane : null;
         if (pane == null && !leftPane.selectedKeys.isEmpty()) {
             pane = leftPane;
@@ -856,6 +858,7 @@ public class MainActivity extends Activity {
                     addFileToZip(source.file, source.file.getName(), output, usedNames, counter);
                     counter.itemDone();
                 }
+                output.finish();
                 operation.records.add(new OperationRecord(zipFile, zipFile, null));
             } catch (IOException exception) {
                 error = exception.getMessage();
@@ -1021,6 +1024,7 @@ public class MainActivity extends Activity {
     }
 
     private void showRenameDialog() {
+        if (operationInProgress) return;
         List<CommanderPane> panes = selectedPanes();
         List<FileEntry> sources = selectedEntriesFromPanes(panes);
         if (sources.size() != 1) {
@@ -1062,6 +1066,7 @@ public class MainActivity extends Activity {
         dialog.setOnShowListener(unused -> {
             nameInput.requestFocus();
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+                if (operationInProgress) return;
                 String newName = nameInput.getText() == null ? "" : nameInput.getText().toString().trim();
                 if (!isValidFileName(newName)) {
                     nameInput.setError(getString(R.string.rename_invalid_name));
@@ -1162,6 +1167,7 @@ public class MainActivity extends Activity {
     }
 
     private void executeDeleteOperation(List<CommanderPane> sourcePanes, List<FileEntry> sources, boolean trash) {
+        if (operationInProgress) return;
         for (FileEntry source : sources) {
             if (source.isDocument()) {
                 executeDocumentDeleteOperation(sourcePanes, sources, trash);
@@ -1316,6 +1322,7 @@ public class MainActivity extends Activity {
                 output.closeEntry();
             }
             File[] children = source.listFiles();
+            if (children == null) throw new IOException(getString(R.string.no_readable_selection));
             if (children != null) {
                 Arrays.sort(children, Comparator.comparing(file -> file.getName().toLowerCase(Locale.ROOT)));
                 for (File child : children) {
@@ -1389,6 +1396,7 @@ public class MainActivity extends Activity {
 
     private void executeFileOperation(CommanderPane sourcePane, FileEntry targetDirectory,
                                       List<FileEntry> sources, boolean move, ConflictMode conflictMode) {
+        if (operationInProgress) return;
         boolean documentOperation = targetDirectory.isDocument();
         for (FileEntry source : sources) {
             documentOperation |= source.isDocument();
@@ -1421,7 +1429,7 @@ public class MainActivity extends Activity {
                     File preferredDestination = new File(targetFolder, sourceFile.getName());
                     if (preferredDestination.exists() && !sameFile(sourceFile, preferredDestination)) {
                         if (conflictMode == ConflictMode.REPLACE) {
-                            replacedBackup = backupExistingDestination(preferredDestination, operation.backupRoot);
+                            replacedBackup = backupExistingDestination(preferredDestination);
                             destination = preferredDestination;
                         } else {
                             destination = uniqueFile(targetFolder, sourceFile.getName());
@@ -1432,29 +1440,35 @@ public class MainActivity extends Activity {
                         destination = preferredDestination;
                     }
 
-                    if (move && sourceFile.renameTo(destination)) {
-                        counter.addBytes(Math.max(1L, totalBytes(destination)));
+                    if (move) {
+                        moveToNewPath(sourceFile, destination, counter);
                     } else {
-                        copyRecursive(sourceFile, destination, counter);
-                        if (move) {
-                            deleteRecursive(sourceFile);
-                        }
+                        copyToNewPath(sourceFile, destination, counter);
                     }
                     operation.records.add(new OperationRecord(sourceFile, destination, replacedBackup));
                     counter.itemDone();
                     done++;
+                } catch (FileOperationSafety.SourceCleanupException exception) {
+                    // Deletion may already have removed part of the source tree.
+                    // Retain both the completed destination and any replaced-file backup.
+                    error = getString(R.string.move_cleanup_failed, destination.getAbsolutePath())
+                            + "\n" + exception.getCause().getMessage();
+                    if (replacedBackup != null) {
+                        error += "\n" + getString(R.string.recovery_retained, replacedBackup.getAbsolutePath());
+                    }
+                    break;
                 } catch (IOException exception) {
+                    error = exception.getMessage();
                     try {
-                        if (destination != null && destination.exists()) {
-                            deleteRecursive(destination);
-                        }
-                        if (replacedBackup != null && replacedBackup.exists() && destination != null) {
+                        // Only private staging files are disposable. An occupied target may
+                        // belong to another app, or be the complete copy after a move failure.
+                        if (replacedBackup != null && destination != null) {
                             restoreBackup(replacedBackup, destination);
                         }
-                    } catch (IOException ignored) {
-                        // Keep the original error visible; best-effort cleanup may fail on locked files.
+                    } catch (IOException recoveryError) {
+                        error += "\n" + getString(R.string.recovery_retained, replacedBackup.getAbsolutePath())
+                                + "\n" + recoveryError.getMessage();
                     }
-                    error = exception.getMessage();
                     break;
                 }
             }
@@ -1536,14 +1550,19 @@ public class MainActivity extends Activity {
                     }
 
                     if (move) {
-                        deleteStorageEntry(source);
+                        FileOperationSafety.copyThenDelete(() -> {}, () -> deleteStorageEntry(source));
                     }
                     operation.storageRecords.add(new StorageOperationRecord(
                             source.parent, source.name(), targetDirectory, destinationName,
                             destination, sourceBackup, replacedBackup));
                     counter.itemDone();
                     done++;
+                } catch (FileOperationSafety.SourceCleanupException exception) {
+                    error = getString(R.string.move_cleanup_failed, destinationName)
+                            + "\n" + exception.getCause().getMessage();
+                    break;
                 } catch (IOException exception) {
+                    error = exception.getMessage();
                     try {
                         if (destination != null && storageEntryExists(destination)) {
                             deleteStorageEntry(destination);
@@ -1551,10 +1570,10 @@ public class MainActivity extends Activity {
                         if (replacedBackup != null) {
                             restoreStorageBackup(replacedBackup, targetDirectory, destinationName, null);
                         }
-                    } catch (IOException ignored) {
-                        // Preserve the first failure; cleanup is best effort.
+                    } catch (IOException recoveryError) {
+                        error += "\n" + getString(R.string.recovery_retained, operation.backupRoot.getAbsolutePath())
+                                + "\n" + recoveryError.getMessage();
                     }
-                    error = exception.getMessage();
                     break;
                 }
             }
@@ -1608,6 +1627,9 @@ public class MainActivity extends Activity {
 
     private FileEntry copyEntryToDirectory(FileEntry source, FileEntry targetDirectory,
                                            String destinationName, ProgressCounter counter) throws IOException {
+        if (source.file != null && java.nio.file.Files.isSymbolicLink(source.file.toPath())) {
+            throw new IOException(getString(R.string.no_readable_selection));
+        }
         if (targetDirectory.isDocument()) {
             String mime = source.isPhysicalDirectory()
                     ? DocumentsContract.Document.MIME_TYPE_DIR
@@ -1627,7 +1649,7 @@ public class MainActivity extends Activity {
                 throw new IOException(getString(R.string.cannot_create_folder, destinationName));
             }
             if (source.isPhysicalDirectory()) {
-                for (FileEntry child : source.children(false)) {
+                for (FileEntry child : operationChildren(source)) {
                     copyEntryToDirectory(child, destination, child.name(), counter);
                 }
             } else {
@@ -1642,7 +1664,7 @@ public class MainActivity extends Activity {
                 throw new IOException(getString(R.string.cannot_create_folder, destinationName));
             }
             FileEntry destination = new FileEntry(destinationFile, targetDirectory);
-            for (FileEntry child : source.children(false)) {
+            for (FileEntry child : operationChildren(source)) {
                 copyEntryToDirectory(child, destination, child.name(), counter);
             }
             return destination;
@@ -1735,6 +1757,85 @@ public class MainActivity extends Activity {
         return copyEntryToDirectory(new FileEntry(backup, null), parent, name, counter);
     }
 
+    private byte[] captureSnapshot(FileEntry entry) {
+        try {
+            return FileOperationSafety.snapshot(snapshotNode(entry));
+        } catch (IOException | SecurityException error) {
+            // Keep the successful operation, but never authorize an unverifiable undo.
+            return null;
+        }
+    }
+
+    private void requireUnchanged(byte[] expected, FileEntry entry) throws IOException {
+        try {
+            if (!FileOperationSafety.unchanged(expected, snapshotNode(entry))) {
+                throw new IOException(getString(R.string.undo_changed));
+            }
+        } catch (SecurityException error) {
+            throw new IOException(getString(R.string.undo_changed), error);
+        }
+    }
+
+    private List<FileEntry> operationChildren(FileEntry entry) throws IOException {
+        List<FileEntry> result = new ArrayList<>();
+        if (!entry.isDocument()) {
+            File[] children = entry.file.listFiles();
+            if (children == null) throw new IOException(getString(R.string.no_readable_selection));
+            for (File child : children) result.add(new FileEntry(child, entry));
+        } else {
+            Uri uri = DocumentsContract.buildChildDocumentsUriUsingTree(entry.documentUri,
+                    DocumentsContract.getDocumentId(entry.documentUri));
+            // UI listings may hide provider failures; destructive operations must not.
+            try (Cursor cursor = getContentResolver().query(uri,
+                    new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID}, null, null, null)) {
+                if (cursor == null || cursor.getExtras().getBoolean(DocumentsContract.EXTRA_LOADING, false)
+                        || cursor.getExtras().containsKey(DocumentsContract.EXTRA_ERROR)) {
+                    throw new IOException(getString(R.string.no_readable_selection));
+                }
+                while (cursor.moveToNext()) {
+                    Uri child = DocumentsContract.buildDocumentUriUsingTree(entry.documentUri, cursor.getString(0));
+                    FileEntry childEntry = queryDocumentEntry(child, entry);
+                    if (childEntry == null) throw new IOException(getString(R.string.no_readable_selection));
+                    result.add(childEntry);
+                }
+            } catch (RuntimeException error) {
+                throw new IOException(getString(R.string.no_readable_selection), error);
+            }
+        }
+        return result;
+    }
+
+    private FileOperationSafety.Node snapshotNode(FileEntry original) throws IOException {
+        FileEntry entry = original.isDocument()
+                ? queryDocumentEntry(original.documentUri, original.parent) : original;
+        if (entry == null) throw new IOException(getString(R.string.undo_changed));
+        return new FileOperationSafety.Node() {
+            public String name() { return entry.name(); }
+            public String identity() throws IOException {
+                if (entry.isDocument()) {
+                    return entry.documentUri + ":" + entry.documentModified + ":" + entry.documentSize;
+                }
+                java.nio.file.attribute.BasicFileAttributes attributes = java.nio.file.Files.readAttributes(
+                        entry.file.toPath(), java.nio.file.attribute.BasicFileAttributes.class,
+                        java.nio.file.LinkOption.NOFOLLOW_LINKS);
+                if (attributes.isSymbolicLink() || (!attributes.isDirectory() && !attributes.isRegularFile())) {
+                    throw new IOException(getString(R.string.undo_changed));
+                }
+                return attributes.fileKey() + ":" + attributes.lastModifiedTime() + ":" + attributes.size();
+            }
+            public boolean directory() { return entry.isPhysicalDirectory(); }
+            public List<FileOperationSafety.Node> children() throws IOException {
+                List<FileOperationSafety.Node> result = new ArrayList<>();
+                for (FileEntry child : operationChildren(entry)) result.add(snapshotNode(child));
+                return result;
+            }
+            public InputStream open() throws IOException {
+                return entry.isDocument() ? getContentResolver().openInputStream(entry.documentUri)
+                        : new FileInputStream(entry.file);
+            }
+        };
+    }
+
     private boolean storageEntryExists(FileEntry entry) {
         if (entry == null) {
             return false;
@@ -1753,10 +1854,11 @@ public class MainActivity extends Activity {
         return root;
     }
 
-    private File backupExistingDestination(File existing, File backupRoot) throws IOException {
-        File backup = uniqueFile(backupRoot, existing.getName());
-        copyRecursivePlain(existing, backup);
-        deleteRecursive(existing);
+    private File backupExistingDestination(File existing) throws IOException {
+        File directory = java.nio.file.Files.createTempDirectory(
+                existing.getParentFile().toPath(), ".OpenCommanderUndo-").toFile();
+        File backup = new File(directory, existing.getName());
+        java.nio.file.Files.move(existing.toPath(), backup.toPath());
         return backup;
     }
 
@@ -1798,6 +1900,7 @@ public class MainActivity extends Activity {
     }
 
     private void undoOperation(LastOperation operation) {
+        if (operationInProgress) return;
         if (operation == null || operation.recordCount() == 0) {
             updateGlobalStatus(getString(R.string.undo_empty_action));
             return;
@@ -1818,24 +1921,38 @@ public class MainActivity extends Activity {
 
             for (OperationRecord record : records) {
                 try {
-                    if (operation.move || operation.delete || operation.trash) {
-                        File parent = record.original.getParentFile();
-                        if (parent != null && !parent.exists() && !parent.mkdirs()) {
-                            throw new IOException(getString(R.string.missing_original_folder, parent.getAbsolutePath()));
-                        }
-                        if (!record.destination.renameTo(record.original)) {
-                            copyRecursive(record.destination, record.original, counter);
-                            deleteRecursive(record.destination);
+                    if (!record.destinationReverted) {
+                        requireUnchanged(record.destinationSnapshot, new FileEntry(record.destination, null));
+                        if (operation.move || operation.delete || operation.trash) {
+                            if (java.nio.file.Files.exists(record.original.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                                throw new IOException(getString(R.string.target_exists_title));
+                            }
+                            File parent = record.original.getParentFile();
+                            if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                                throw new IOException(getString(R.string.missing_original_folder, parent.getAbsolutePath()));
+                            }
+                            // Never merge into or overwrite a newly created source path.
+                            try {
+                                moveToNewPath(record.destination, record.original, counter);
+                            } catch (FileOperationSafety.SourceCleanupException cleanupError) {
+                                record.destinationReverted = true;
+                                throw new IOException(getString(R.string.move_cleanup_failed,
+                                        record.original.getAbsolutePath()), cleanupError);
+                            }
                         } else {
-                            counter.addBytes(Math.max(1L, totalBytes(record.original)));
+                            // Rename into private recovery storage before any cleanup. This also
+                            // preserves edits made externally between verification and the rename.
+                            File recoveryRoot = java.nio.file.Files.createTempDirectory(
+                                    record.destination.getParentFile().toPath(), ".OpenCommanderUndo-").toFile();
+                            File recovery = new File(recoveryRoot, record.destination.getName());
+                            java.nio.file.Files.move(record.destination.toPath(), recovery.toPath());
                         }
-                    } else {
-                        deleteRecursive(record.destination);
-                        counter.addBytes(1L);
+                        record.destinationReverted = true;
                     }
-                    if (record.replacedBackup != null && record.replacedBackup.exists()) {
+                    if (record.replacedBackup != null) {
                         restoreBackup(record.replacedBackup, record.destination);
                     }
+                    operation.records.remove(record);
                     counter.itemDone();
                     done++;
                 } catch (IOException exception) {
@@ -1883,17 +2000,26 @@ public class MainActivity extends Activity {
 
             for (StorageOperationRecord record : records) {
                 try {
-                    if (storageEntryExists(record.destination)) {
-                        deleteStorageEntry(record.destination);
+                    if (!record.destinationReverted && record.destination != null) {
+                        requireUnchanged(record.destinationSnapshot, record.destination);
                     }
-                    if (record.sourceBackup != null) {
+                    // Restore the source before removing the destination. A conflict or
+                    // failed provider write must leave the complete destination intact.
+                    if (record.sourceBackup != null && !record.sourceRestored) {
                         restoreStorageBackup(record.sourceBackup, record.originalParent,
                                 record.originalName, counter);
+                        record.sourceRestored = true;
+                    }
+                    if (!record.destinationReverted && record.destination != null) {
+                        backupStorageEntry(record.destination, operation.backupRoot);
+                        deleteStorageEntry(record.destination);
+                        record.destinationReverted = true;
                     }
                     if (record.replacedBackup != null) {
                         restoreStorageBackup(record.replacedBackup, record.targetParent,
                                 record.destinationName, counter);
                     }
+                    operation.storageRecords.remove(record);
                     counter.itemDone();
                     done++;
                 } catch (IOException exception) {
@@ -1932,25 +2058,42 @@ public class MainActivity extends Activity {
     }
 
     private void restoreBackup(File backup, File destination) throws IOException {
-        if (destination.exists()) {
-            deleteRecursive(destination);
+        if (java.nio.file.Files.exists(destination.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException(getString(R.string.target_exists_title));
         }
         File parent = destination.getParentFile();
         if (parent != null && !parent.exists() && !parent.mkdirs()) {
             throw new IOException(getString(R.string.cannot_create_target_folder, parent.getAbsolutePath()));
         }
-        if (!backup.renameTo(destination)) {
-            copyRecursivePlain(backup, destination);
-            deleteRecursive(backup);
-        }
+        // Replacement backups live on the same volume. Renaming preserves identity,
+        // symlinks and metadata, and never overwrites an occupied destination.
+        java.nio.file.Files.move(backup.toPath(), destination.toPath());
+    }
+
+    private void copyToNewPath(File source, File destination, ProgressCounter counter) throws IOException {
+        FileOperationSafety.copyToNewPath(source, destination, (from, to) -> {
+            if (counter == null) copyRecursivePlain(from, to);
+            else copyRecursive(from, to, counter);
+        });
+    }
+
+    private void moveToNewPath(File source, File destination, ProgressCounter counter) throws IOException {
+        FileOperationSafety.moveToNewPath(source, destination, (from, to) -> {
+            if (counter == null) copyRecursivePlain(from, to);
+            else copyRecursive(from, to, counter);
+        }, this::deleteRecursive);
     }
 
     private void copyRecursive(File source, File destination, ProgressCounter counter) throws IOException {
+        if (java.nio.file.Files.isSymbolicLink(source.toPath())) {
+            throw new IOException(getString(R.string.no_readable_selection));
+        }
         if (source.isDirectory()) {
             if (!destination.exists() && !destination.mkdirs()) {
                 throw new IOException(getString(R.string.cannot_create_folder, destination.getName()));
             }
             File[] children = source.listFiles();
+            if (children == null) throw new IOException(getString(R.string.no_readable_selection));
             if (children != null) {
                 for (File child : children) {
                     copyRecursive(child, new File(destination, child.getName()), counter);
@@ -1971,11 +2114,15 @@ public class MainActivity extends Activity {
     }
 
     private void copyRecursivePlain(File source, File destination) throws IOException {
+        if (java.nio.file.Files.isSymbolicLink(source.toPath())) {
+            throw new IOException(getString(R.string.no_readable_selection));
+        }
         if (source.isDirectory()) {
             if (!destination.exists() && !destination.mkdirs()) {
                 throw new IOException(getString(R.string.cannot_create_folder, destination.getName()));
             }
             File[] children = source.listFiles();
+            if (children == null) throw new IOException(getString(R.string.no_readable_selection));
             if (children != null) {
                 for (File child : children) {
                     copyRecursivePlain(child, new File(destination, child.getName()));
@@ -1995,7 +2142,7 @@ public class MainActivity extends Activity {
     }
 
     private void deleteRecursive(File file) throws IOException {
-        if (file.isDirectory()) {
+        if (!java.nio.file.Files.isSymbolicLink(file.toPath()) && file.isDirectory()) {
             File[] children = file.listFiles();
             if (children != null) {
                 for (File child : children) {
@@ -2437,6 +2584,7 @@ public class MainActivity extends Activity {
     }
 
     private void showProgress(String message, int progress) {
+        operationInProgress = true;
         runOnUiThread(() -> {
             if (progressText != null) {
                 progressText.setText(message);
@@ -2462,6 +2610,7 @@ public class MainActivity extends Activity {
     }
 
     private void finishProgress(String message) {
+        operationInProgress = false;
         if (progressText != null) {
             progressText.setText(message);
         }
@@ -3951,15 +4100,18 @@ public class MainActivity extends Activity {
         REPLACE
     }
 
-    private static final class OperationRecord {
+    private final class OperationRecord {
         final File original;
         final File destination;
         final File replacedBackup;
+        final byte[] destinationSnapshot;
+        boolean destinationReverted;
 
         OperationRecord(File original, File destination, File replacedBackup) {
             this.original = original;
             this.destination = destination;
             this.replacedBackup = replacedBackup;
+            this.destinationSnapshot = captureSnapshot(new FileEntry(destination, null));
         }
     }
 
@@ -3971,6 +4123,9 @@ public class MainActivity extends Activity {
         final FileEntry destination;
         final File sourceBackup;
         final File replacedBackup;
+        final byte[] destinationSnapshot;
+        boolean destinationReverted;
+        boolean sourceRestored;
 
         StorageOperationRecord(FileEntry originalParent, String originalName,
                                FileEntry targetParent, String destinationName,
@@ -3982,6 +4137,7 @@ public class MainActivity extends Activity {
             this.destination = destination;
             this.sourceBackup = sourceBackup;
             this.replacedBackup = replacedBackup;
+            this.destinationSnapshot = destination == null ? null : captureSnapshot(destination);
         }
     }
 

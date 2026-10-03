@@ -1,8 +1,8 @@
 # OpenCommander
 
-Kostenloser Open-Source-Dateimanager fuer Android, iPhone, iPad und macOS: zwei Seiten, lokale Dateien, ZIP, Drag & Drop und Rueckgaengig. Keine Werbung, kein Tracking, kein Konto.
+Kostenloser Open-Source-Dateimanager fuer Android, iPhone, iPad, macOS und Linux: zwei Seiten, lokale Dateien, ZIP, Drag & Drop und Rueckgaengig. Keine Werbung, kein Tracking, kein Konto.
 
-OpenCommander ist ein lokaler Android-Dateimanager im Stil eines zweigeteilten Commanders. Die App ist fuer Nutzer gedacht, die Dateien schnell zwischen zwei Seiten organisieren wollen und dabei eine transparente, kostenlose und quelloffene App bevorzugen.
+OpenCommander ist ein lokaler Dateimanager fuer Android, iOS, macOS und Linux im Stil eines zweigeteilten Commanders. Die App ist fuer Nutzer gedacht, die Dateien schnell zwischen zwei Seiten organisieren wollen und dabei eine transparente, kostenlose und quelloffene App bevorzugen.
 
 ## Funktionen
 
@@ -30,8 +30,8 @@ OpenCommander ist ein lokaler Android-Dateimanager im Stil eines zweigeteilten C
 - `Dunkel` schaltet zwischen hellem und dunklem Design und wird gespeichert
 - Ueberarbeitete helle und dunkle Oberflaeche mit klareren Panels, Buttons und Dateizeilen
 - Kleiner `AGB`-Button zeigt AGB-/Impressum-Informationen
-- Cloud-Anbieter sind vorerst wieder entfernt, bis die Bedienung dafuer klarer ist
-- Mehrsprachige Oberflaeche: Deutsch, Englisch, Franzoesisch, Spanisch, Italienisch, Portugiesisch und Niederlaendisch
+- macOS: Zugriff auf lokal eingebundene Cloud-Ordner (z. B. Google Drive, OneDrive, iCloud Drive); Einrichtung und Synchronisation erfolgen in der jeweiligen Anbieter-App
+- Mehrsprachige Oberflaeche mit 20 Sprachen: Deutsch, Englisch, Franzoesisch, Spanisch, Italienisch, Portugiesisch, Niederlaendisch, Chinesisch, Japanisch, Koreanisch, Arabisch, Hindi, Russisch, Tuerkisch, Polnisch, Indonesisch, Vietnamesisch, Thai, Ukrainisch und Schwedisch
 
 ## Warum OpenCommander?
 
@@ -96,6 +96,26 @@ app/build/outputs/apk/debug/app-debug.apk
 
 Beim ersten Start muss Android den benoetigten Dateizugriff erlauben. Unter Android 10 wird dafuer ein Ordner im Systemdialog ausgewaehlt; unter Android 11 und neuer wird der spezielle Zugriff auf alle Dateien verwendet.
 
+### Linux
+
+Die native Qt-Desktop-Version unter `linux/` orientiert sich an der Mac-Version:
+zwei Bereiche mit je Ordnerbaum und Dateiliste, Kopieren/Verschieben, sichere
+Ruecknahme, ZIP, Drag-and-drop, Desktop-Zwischenablage, Vorschau sowie Deutsch/Englisch.
+
+```bash
+./linux/run.sh
+```
+
+Mit `./linux/build.sh` entsteht ein eigenstaendig startbares Linux-Paket unter
+`linux/artifacts/`. Das x86_64-Paket wird auf Ubuntu 24.04 gebaut. Es verwendet
+vorhandene Linux-Laufwerke und Treiber, keine macOS-NTFS-Erweiterung.
+Der Dialog **Verbindungen** integriert USB-Einbinden/Auswerfen, SMB/SFTP/WebDAV
+sowie Google Drive und OneDrive über GNOME/GVFS. Bereits vorhandene rclone-Mounts
+werden automatisch erkannt. Voraussetzungen und Provider-Grenzen stehen in der Linux-Anleitung.
+Installationshinweise, Tests und Unterschiede zur Mac-Version stehen in
+[linux/README.md](linux/README.md). Der dokumentierte Linux-Stand ist **0.2.4**;
+Details zu Änderungen und Prüfungen stehen im [Linux-Änderungsprotokoll](linux/CHANGELOG.md).
+
 ### macOS
 
 Die Swift-App unter `ios/` wird zugleich als native Mac-Catalyst-App gebaut. Sie enthaelt die bestehenden Commander-Funktionen und zusaetzlich Mac-Tastaturbefehle:
@@ -103,11 +123,12 @@ Die Swift-App unter `ios/` wird zugleich als native Mac-Catalyst-App gebaut. Sie
 - `Command-C`, `Command-X`, `Command-V`: Dateien kopieren, ausschneiden und einfuegen
 - `Command-A`: alles in der aktiven Seite auswaehlen
 - `Command-Z`: letzte Dateioperation rueckgaengig machen
-- `Command-O`: Ordner oder angeschlossenes Laufwerk oeffnen
+- `Command-O`: ausgewaehlte Datei oder Ordner oeffnen
 - `Command-R`: aktive Seite aktualisieren
 - `Command-Shift-N`: neuen Ordner erstellen
 - `Command-Shift-.`: versteckte Dateien ein- oder ausblenden
-- `Return` oder `Leertaste`: markierte Datei beziehungsweise Ordner oeffnen
+- `Return`: markierte Datei beziehungsweise Ordner oeffnen
+- `Leertaste` oder `Command-Y`: Quick-Look-Vorschau
 - `Rueckschritt`: markierte Elemente loeschen
 
 ```bash
@@ -122,6 +143,15 @@ Die direkte macOS-Version ist als Finder-Ersatz ohne App-Sandbox ausgelegt. Die 
 Beim ersten Mac-Start erklaert OpenCommander den Festplattenvollzugriff und oeffnet auf Wunsch direkt die passende Seite der Systemeinstellungen. Diese Freigabe muss aus Sicherheitsgruenden einmal vom Nutzer erteilt werden; eine App darf sie sich unter macOS nicht selbst geben. OpenCommander prueft den Status nach der Rueckkehr asynchron, zeigt unter `Computer / Laufwerke` dauerhaft `Festplattenvollzugriff aktiv ✓` und aktualisiert beide Dateiseiten automatisch. Bereits ueber den Ordnerdialog erteilte Rechte werden zusaetzlich als Security-Scoped-Bookmarks gespeichert und nach einem Neustart wiederverwendet.
 
 Fuer den Betrieb als primaerer Finder-Ersatz ist die direkt vertriebene, signierte macOS-Version ohne App-Sandbox vorgesehen. Eine Mac-App-Store-Version bleibt an Apples Sandbox und Ordnerauswahl gebunden. Auch die direkte Version kann die einmalige Bestaetigung unter `Datenschutz & Sicherheit > Festplattenvollzugriff` nicht automatisieren und Finder nicht als geschuetzte Systemkomponente deinstallieren; danach kann sie aber als alltaeglicher Dateimanager fuer Root, Benutzerordner und externe Laufwerke verwendet werden.
+
+### NTFS-Komponenten
+
+Der unabhaengige Swift-Kern unter `ntfs/OpenCommanderNTFS/` ist MIT-lizenziert.
+Daneben liegt unter `ntfs/NTFS3G/` ein separater experimenteller NTFS-3G-/FSKit-Prototyp
+mit GPL-2.0-or-later-Komponenten. Herkunft, Lizenztexte und der aktuelle Teststand
+stehen in `ntfs/NTFS3G/THIRD-PARTY.md` und `ntfs/NTFS3G/README.md`.
+Schreibbetrieb erfordert explizit `OPENCOMMANDER_NTFS3G_EXPERIMENTAL`; der normale
+Build verweigert Mounts weiterhin. Der Prototyp ist nicht produktionsreif.
 
 ### Unabhaengiger NTFS-Kern
 
@@ -145,3 +175,48 @@ Tests des portablen Kerns:
 cd ntfs/OpenCommanderNTFS
 swift test
 ```
+
+## Dateisicherheit und Wiederherstellung
+
+Kopier-, Verschiebe- und ZIP-Aktionen speichern fuer Rueckgaengig einen Inhaltspruefwert
+sowie Dateimetadaten. Wurden Dateien inzwischen bearbeitet, ersetzt oder um weitere
+Unterdateien ergaenzt, wird die betreffende Ruecknahme gestoppt. Bereits belegte
+urspruengliche Dateipfade werden nicht ueberschrieben. Nach einem Teilfehler bleiben
+noch nicht abgeschlossene Ruecknahmen in der Historie; erfolgreich abgeschlossene
+Eintraege werden nicht nochmals ausgefuehrt.
+
+Scheitert auf Android nach einer vollstaendigen Kopie das anschliessende Loeschen
+der Quelle, bleibt die Zielkopie erhalten. Der Fehlerhinweis nennt ihren Ort.
+Beim Ersetzen auf iOS/macOS wird die Kopie zuerst vollstaendig in einem temporaeren
+Ordner auf dem Ziellaufwerk vorbereitet. Erst danach wird die vorhandene Datei
+zur Wiederherstellung gesichert und die neue Kopie veroeffentlicht.
+
+Rueckgaengig bewahrt entfernte lokale Kopien in versteckten
+`.OpenCommanderUndo-*`-Ordnern neben dem bisherigen Ziel auf. Beim Ersetzen koennen
+auch `.OpenCommanderTransfer-*`-Ordner eine vorherige Version enthalten.
+Androids Dokumentanbieter-Zugriffe sichern Daten im privaten App-Cache. Diese
+Sicherungen verbrauchen Speicherplatz und werden nicht automatisch geloescht;
+Android darf Cache-Inhalte jedoch selbst entfernen. Die Historie gilt fuer die
+laufende App-Sitzung und ersetzt kein dauerhaftes Backup. Fehlende oder nicht
+pruefbare Dateien erlauben keine destruktive Ruecknahme. Inhaltspruefungen lesen
+die betroffenen Dateien erneut, was bei grossen Dateien und Cloud-Inhalten dauern kann.
+
+## Automatische Pruefungen
+
+```bash
+python3 ios/localization_parity_test.py
+tests/run-java-safety.sh
+ANDROID_HOME="$HOME/Android/Sdk" ./gradlew :app:assembleDebug :app:lintDebug --no-daemon
+```
+
+Auf macOS mit Swift/Xcode:
+
+```bash
+tests/run-swift-safety.sh
+swift test --package-path ntfs/OpenCommanderNTFS
+```
+
+Die GitHub-Actions-Pipeline prueft Android-Build, Lint, Sprachschluessel und
+Dateisicherheitsregressionen sowie auf macOS die Swift-Dateioperationen,
+den portablen NTFS-Kern und den iOS-Simulator-Build. Geraetetests fuer Androids
+Storage Access Framework, Cloud-Anbieter und Mac Catalyst bleiben erforderlich.

@@ -125,4 +125,7 @@
     <string name="zip_failed">ZIP に失敗しました: %1$s</string>
     <string name="zip_detail">ZIP アーカイブ</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">取り消しを停止しました。ファイルが変更されたか、確認できません。これ以上ファイルを削除しません。</string>
+    <string name="move_cleanup_failed">コピー元を完全に削除できませんでした。完全なコピーは次の場所に保持されています: %1$s</string>
+    <string name="recovery_retained">復旧用ファイルは次の場所に保持されています: %1$s</string>
 </resources>

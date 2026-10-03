@@ -125,4 +125,7 @@
     <string name="zip_failed">ZIP fehlgeschlagen: %1$s</string>
     <string name="zip_detail">ZIP-Archiv</string>
     <string name="zip_label">ZIP (%1$d)</string>
+    <string name="undo_changed">Rückgängig gestoppt: Dateien wurden verändert oder können nicht geprüft werden. Es werden keine weiteren Dateien entfernt.</string>
+    <string name="move_cleanup_failed">Die Quelle konnte nicht vollständig gelöscht werden. Die vollständige Kopie bleibt erhalten unter: %1$s</string>
+    <string name="recovery_retained">Wiederherstellungsdateien bleiben erhalten unter: %1$s</string>
 </resources>
