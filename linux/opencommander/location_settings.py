@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTableWidget,
-    QTableWidgetItem, QPushButton, QLabel, QFileDialog, QComboBox)
+    QTableWidgetItem, QPushButton, QLabel, QFileDialog, QComboBox, QCheckBox)
 
 
 class LocationSettingsDialog(QDialog):
@@ -30,6 +30,10 @@ class LocationSettingsDialog(QDialog):
         language_row.addWidget(self.language_combo)
         language_row.addStretch()
         layout.addLayout(language_row)
+        self.theme_checkbox = QCheckBox()
+        self.theme_checkbox.setChecked(main.dark)
+        self.theme_checkbox.toggled.connect(lambda _: main.toggle_theme())
+        layout.addWidget(self.theme_checkbox)
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels(['Sichtbar', 'Name', 'Pfad'] if self.de else ['Visible', 'Name', 'Path'])
         layout.addWidget(self.table)
@@ -57,6 +61,7 @@ class LocationSettingsDialog(QDialog):
     def retranslate(self):
         self.setWindowTitle('Einstellungen / Orte' if self.de else 'Settings / Locations')
         self.language_label.setText('Sprache' if self.de else 'Language')
+        self.theme_checkbox.setText('Dunkles Erscheinungsbild' if self.de else 'Dark appearance')
         self.table.setHorizontalHeaderLabels(['Sichtbar', 'Name', 'Pfad'] if self.de else ['Visible', 'Name', 'Path'])
         self.help_label.setText('Nur Verknüpfungen werden geändert; Dateien bleiben erhalten.' if self.de
                                else 'Only shortcuts are changed; files are preserved.')

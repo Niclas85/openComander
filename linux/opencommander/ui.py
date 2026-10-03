@@ -494,7 +494,6 @@ class MainWindow(QMainWindow):
         self.theme_button = QCheckBox()
         self.theme_button.setChecked(self.dark)
         self.theme_button.clicked.connect(self.toggle_theme)
-        header.addWidget(self.theme_button)
         self.location_settings_button = QPushButton('Einstellungen / Orte' if self.language == 'de' else 'Settings / Locations')
         self.location_settings_button.clicked.connect(self.location_settings)
         header.addWidget(self.location_settings_button)
@@ -526,7 +525,11 @@ class MainWindow(QMainWindow):
             self.addAction(action)
         self.actions['hidden'].setCheckable(True)
         self.actions['hidden'].setChecked(self.hidden)
-        for key in ('rename', 'new_folder', 'trash', 'zip', 'extract', 'preview', 'undo', 'history', 'help'):
+        help_button = QPushButton()
+        help_button.clicked.connect(self.help)
+        self.header_help_button = help_button
+        header.insertWidget(header.count() - 1, help_button)
+        for key in ('rename', 'new_folder', 'trash', 'zip', 'extract', 'preview', 'undo', 'history'):
             self.toolbar.addAction(self.actions[key])
             self.toolbar.widgetForAction(self.actions[key]).setProperty('actionKind', key)
         self.hidden_checkbox = QCheckBox()
@@ -541,7 +544,8 @@ class MainWindow(QMainWindow):
         places_scroll = QScrollArea()
         places_scroll.setWidgetResizable(True)
         places_scroll.setWidget(places_widget)
-        places_scroll.setFixedHeight(68)
+        places_scroll.setFixedHeight(56)
+        places_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(places_scroll)
         self.integration_locations = []
         self.integration_scanning = False
@@ -1025,6 +1029,7 @@ class MainWindow(QMainWindow):
 
     def retranslate(self):
         self.location_settings_button.setText('Einstellungen / Orte' if self.language == 'de' else 'Settings / Locations')
+        self.header_help_button.setText(self.tr_key('help'))
         for key, action in self.actions.items():
             action.setText(self.tr_key(key))
             action.setToolTip(self.tr_key(key) + (f' ({action.shortcut().toString()})' if not action.shortcut().isEmpty() else ''))
@@ -1088,8 +1093,11 @@ class MainWindow(QMainWindow):
             if path in seen:
                 continue
             seen.add(path)
-            button = QPushButton(name)
-            button.setToolTip(str(path))
+            button = QPushButton()
+            button.setText(button.fontMetrics().elidedText(name, Qt.ElideMiddle, 210))
+            button.setToolTip(f'{name}\n{path}')
+            button.setAccessibleName(name)
+            button.setMaximumWidth(230)
             button.setObjectName('place')
             button.clicked.connect(lambda checked=False, path=path: self.active.navigate(path))
             self.places.addWidget(button)

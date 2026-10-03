@@ -327,6 +327,10 @@ private final class DesktopLocationSettingsViewController: UITableViewController
     var changed: ([DesktopLocationPreference]) -> Void
     var chooseFolder: (@escaping (URL?) -> Void) -> Void
     var languageChanged: ((String) -> Void)?
+    var darkMode = false
+    var themeChanged: (() -> Void)?
+    var defaultAppRequested: (() -> Void)?
+    var legalRequested: (() -> Void)?
 
     init(entries: [DesktopLocationPreference], changed: @escaping ([DesktopLocationPreference]) -> Void,
          chooseFolder: @escaping (@escaping (URL?) -> Void) -> Void) {
@@ -347,7 +351,7 @@ private final class DesktopLocationSettingsViewController: UITableViewController
     private func save() { changed(entries); tableView.reloadData() }
     override func numberOfSections(in tableView: UITableView) -> Int { 2 }
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        section == 0 ? 1 : entries.count
+        section == 0 ? 4 : entries.count
     }
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
         section == 1 ? L10n.get("location_settings_help") : nil
@@ -355,6 +359,26 @@ private final class DesktopLocationSettingsViewController: UITableViewController
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         if indexPath.section == 0 {
             let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+            if indexPath.row == 1 {
+                cell.textLabel?.text = L10n.get("dark")
+                let toggle = UISwitch()
+                toggle.isOn = darkMode
+                toggle.accessibilityIdentifier = "SettingsThemeSwitch"
+                toggle.addAction(UIAction { [weak self] _ in
+                    guard let self else { return }
+                    self.darkMode.toggle()
+                    self.themeChanged?()
+                    self.overrideUserInterfaceStyle = self.darkMode ? .dark : .light
+                }, for: .valueChanged)
+                cell.accessoryView = toggle
+                cell.selectionStyle = .none
+                return cell
+            }
+            if indexPath.row > 1 {
+                cell.textLabel?.text = L10n.get(indexPath.row == 2 ? "folder_default_title" : "legal_short")
+                cell.accessoryType = .disclosureIndicator
+                return cell
+            }
             cell.textLabel?.text = L10n.get("language")
             cell.selectionStyle = .none
             let dropdown = UIButton(type: .system)
@@ -395,7 +419,11 @@ private final class DesktopLocationSettingsViewController: UITableViewController
         return cell
     }
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        guard indexPath.section == 1 else { return }
+        if indexPath.section == 0 {
+            let action = indexPath.row == 2 ? defaultAppRequested : indexPath.row == 3 ? legalRequested : nil
+            if let action { dismiss(animated: true, completion: action) }
+            return
+        }
         let entry = entries[indexPath.row]
         let alert = UIAlertController(title: L10n.get("location_rename"), message: entry.path, preferredStyle: .alert)
         alert.addTextField { $0.text = entry.name }
@@ -431,7 +459,11 @@ private final class DesktopLocationSettingsViewController: UITableViewController
 
 private final class CompactActionToolbar: UIView {
     private let buttons: [UIButton]
+#if targetEnvironment(macCatalyst)
+    private let gap: CGFloat = 6
+#else
     private let gap: CGFloat = 2
+#endif
     private let horizontalPadding: CGFloat = 6
 
     init(buttons: [UIButton]) {
@@ -483,7 +515,10 @@ private final class CompactActionToolbar: UIView {
             fontSize -= 0.1
             sizes = widths(fontSize: fontSize)
         }
-        let extra = max(0, bounds.width - sizes.reduce(0, +) - spacing) / CGFloat(buttons.count)
+        var extra = max(0, bounds.width - sizes.reduce(0, +) - spacing) / CGFloat(buttons.count)
+#if targetEnvironment(macCatalyst)
+        extra = min(extra, 24)
+#endif
         var x: CGFloat = 0
         for (index, button) in buttons.enumerated() {
             button.titleLabel?.font = .systemFont(ofSize: fontSize)
@@ -822,6 +857,11 @@ class ViewController: UIViewController {
         titleRow.axis = .horizontal
         titleRow.alignment = .center
         titleRow.spacing = 4
+#if targetEnvironment(macCatalyst)
+        titleRow.spacing = 12
+        topBar.layoutMargins = UIEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
+        topBar.spacing = 8
+#endif
         titleRow.accessibilityIdentifier = "TitleToolbar"
         topBar.addArrangedSubview(titleRow)
 
@@ -899,23 +939,7 @@ class ViewController: UIViewController {
         }, for: .valueChanged)
         modeRow.insertArrangedSubview(modeSwitch, at: 1)
         titleRow.addArrangedSubview(modeRow)
-        let themeRow = UIStackView()
-        themeRow.axis = .horizontal
-        themeRow.alignment = .center
-        themeRow.spacing = 6
-        let darkLabel = UILabel()
-        darkLabel.text = L10n.get("dark")
-        darkLabel.font = .systemFont(ofSize: 13)
-        darkLabel.textColor = theme.primaryText
-        let darkSwitch = UISwitch()
-        darkSwitch.isOn = darkMode
-        darkSwitch.accessibilityIdentifier = "ThemeSwitch"
-        darkSwitch.accessibilityLabel = L10n.get("dark")
-        darkSwitch.addAction(UIAction { [weak self] _ in self?.toggleDarkModeFromTap() }, for: .valueChanged)
-        themeRow.addArrangedSubview(darkLabel)
-        themeRow.addArrangedSubview(darkSwitch)
-        titleRow.addArrangedSubview(themeRow)
-        let headerButtons = [legalButton]
+        let headerButtons = [helpButton]
 #else
         let headerButtons = [helpButton, legalButton, languageButton!]
 #endif
@@ -933,11 +957,6 @@ class ViewController: UIViewController {
         }
 #if targetEnvironment(macCatalyst)
         openFolderButton = miniButton(label: L10n.get("drives"))
-        let preferencesButton = miniButton(label: L10n.get("folder_default_title"))
-        preferencesButton.setImage(UIImage(systemName: "folder.badge.gearshape"), for: .normal)
-        preferencesButton.accessibilityIdentifier = "FolderDefaultButton"
-        preferencesButton.addTarget(self, action: #selector(showFolderDefaultPreferences), for: .touchUpInside)
-        titleRow.addArrangedSubview(preferencesButton)
         let settingsButton = miniButton(label: L10n.get("location_settings"))
         settingsButton.accessibilityIdentifier = "LocationSettingsButton"
         settingsButton.addTarget(self, action: #selector(showLocationSettings), for: .touchUpInside)
@@ -968,7 +987,7 @@ class ViewController: UIViewController {
             return button
         }
         let toolbar = CompactActionToolbar(buttons: [renameButton, extraButtons[0], deleteButton, zipButton,
-            extraButtons[1], extraButtons[2], undoButton, historyButton, helpButton, extraButtons[3]])
+            extraButtons[1], extraButtons[2], undoButton, historyButton, extraButtons[3]])
         for button in [renameButton, extraButtons[2]].compactMap({ $0 }) {
             tintButton(button: button, lightFill: "#e8f1ff", lightStroke: "#185bb5", lightText: "#185bb5",
                 darkFill: "#1f344d", darkStroke: "#88baff", darkText: "#88baff")
@@ -1254,19 +1273,21 @@ private extension ViewController {
         connections.accessibilityIdentifier = "DesktopAction-connections"
         connections.addTarget(self, action: #selector(showConnections), for: .touchUpInside)
         stack.addArrangedSubview(connections)
-        for location in locations where addedPaths.insert(location.url.standardizedFileURL.path).inserted {
+        for location in locations where addedPaths.insert(location.url.resolvingSymlinksInPath().standardizedFileURL.path).inserted {
             let preference = preferences.first { $0.path == location.url.resolvingSymlinksInPath().standardizedFileURL.path }
             if preference?.enabled == false { continue }
             let button = UIButton(type: .system)
             button.setTitle(preference?.name ?? location.name, for: .normal)
             button.setTitleColor(theme.primaryText, for: .normal)
             button.titleLabel?.font = .systemFont(ofSize: 11, weight: .medium)
+            button.titleLabel?.lineBreakMode = .byTruncatingMiddle
+            button.widthAnchor.constraint(lessThanOrEqualToConstant: 210).isActive = true
             button.backgroundColor = theme.buttonBackground
             button.layer.borderColor = theme.pathBorder.cgColor
             button.layer.borderWidth = 1
             button.layer.cornerRadius = 6
             button.contentEdgeInsets = UIEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
-            button.accessibilityLabel = "\(location.category): \(location.name)"
+            button.accessibilityLabel = "\(location.category): \(preference?.name ?? location.name)"
             button.accessibilityIdentifier = "Location-\(location.url.standardizedFileURL.path)"
             button.addAction(UIAction { [weak self] _ in
                 guard let self, let pane = self.activePane ?? self.leftPane else { return }
@@ -2701,6 +2722,11 @@ extension ViewController: UIDocumentPickerDelegate {
                     bridge.chooseLocation(title: L10n.get("location_add"), completion: completion)
                 })
                 settings.languageChanged = { [weak self] code in self?.applyLanguage(code) }
+                settings.darkMode = self.darkMode
+                settings.overrideUserInterfaceStyle = self.darkMode ? .dark : .light
+                settings.themeChanged = { [weak self] in self?.toggleDarkModeFromTap() }
+                settings.defaultAppRequested = { [weak self] in self?.showFolderDefaultPreferences() }
+                settings.legalRequested = { [weak self] in self?.showLegalDialog() }
                 let navigation = UINavigationController(rootViewController: settings)
                 navigation.modalPresentationStyle = .formSheet
                 self.present(navigation, animated: true)
