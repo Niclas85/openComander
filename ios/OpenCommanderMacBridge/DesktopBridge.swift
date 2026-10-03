@@ -74,7 +74,7 @@ final class DesktopBridge: NSObject, DesktopBridgeProtocol {
                 let values = try url.resourceValues(forKeys: [.volumeURLKey, .volumeIsInternalKey])
                 guard url.standardizedFileURL.path.hasPrefix("/Volumes/"),
                       (values.allValues[.volumeURLKey] as? URL)?.standardizedFileURL == url.standardizedFileURL,
-                      values.volumeIsInternal != true else { throw CocoaError(.fileWriteNoPermission) }
+                      values.volumeIsInternal == false else { throw CocoaError(.fileWriteNoPermission) }
                 try NSWorkspace.shared.unmountAndEjectDevice(at: url)
                 DispatchQueue.main.async { completion(nil) }
             } catch { DispatchQueue.main.async { completion(error as NSError) } }
@@ -82,9 +82,12 @@ final class DesktopBridge: NSObject, DesktopBridgeProtocol {
     }
 
     func installedCloudApplications() -> [[String: String]] {
-        [("Google Drive", "com.google.drivefs"), ("OneDrive", "com.microsoft.OneDrive"),
-         ("Dropbox", "com.getdropbox.dropbox"), ("Box", "com.box.desktop")].compactMap { name, identifier in
-            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: identifier) else { return nil }
+        [("Google Drive", ["com.google.drivefs"]),
+         ("OneDrive", ["com.microsoft.OneDrive", "com.microsoft.OneDrive-mac"]),
+         ("Dropbox", ["com.getdropbox.dropbox"]), ("Box", ["com.box.desktop"])].compactMap { name, identifiers in
+            guard let url = identifiers.lazy.compactMap({
+                NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)
+            }).first else { return nil }
             return ["name": name, "path": url.path]
         }
     }

@@ -720,6 +720,7 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
     }
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        viewController?.view.endEditing(true)
         tableView.deselectRow(at: indexPath, animated: true)
         viewController?.activePane = self
         

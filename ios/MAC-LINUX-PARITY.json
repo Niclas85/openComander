@@ -1,0 +1,57 @@
+{
+  "reference": "origin/codex/linux-desktop@4e72b174ec0ea2579819a0425de0990055edf05f",
+  "target": "macOS / Mac Catalyst",
+  "verified_on": "2026-10-03",
+  "status": "native desktop core port implemented; not exhaustive Linux parity",
+  "implemented": [
+    "Shared light/dark palette and two-pane styling",
+    "Per-pane navigation history, name filter, sortable metadata and adjustable tree divider",
+    "F2 rename, F5 copy, F6 move alongside existing Command shortcuts",
+    "Image/audio/video preview in visible filtered/sorted order; document Quick Look",
+    "Bounded coordinated thumbnail loading",
+    "Safe cancellable staged copies and ZIP extraction",
+    "Persistent operation history and guarded recoverable undo",
+    "File properties and bounded folder-size calculation",
+    "Mounted/cloud locations, external volume mounting/ejection and installed sync-app discovery"
+  ],
+  "verified": {
+    "builds": ["Mac Catalyst signed experimental NTFS build", "iOS Simulator build before final desktop-only refinements"],
+    "automated": [
+      "Swift operation safety, persisted undo, permissions-only modification protection",
+      "Cancelled staged copies preserve the original destination",
+      "ZIP traversal, symlinks, duplicate names and expansion limits",
+      "Synthetic cloud-location discovery including moved Dropbox",
+      "Coordinated image loading and native desktop bridge protocol"
+    ],
+    "visible_ui": [
+      "F5 copies nine synthetic files without removing originals",
+      "History survives app relaunch",
+      "JPG, PNG, WAV and MP4 previews; arrow navigation and Escape close",
+      "Filtered descending image order is respected by preview",
+      "ZIP extraction, matching extracted file hash and recovery via history undo",
+      "ZIP file properties show metadata",
+      "Mount and eject a newly created empty HFS+ disk image via Connections"
+    ]
+  },
+  "remaining": [
+    "Linux GIO SFTP/WebDAV authentication and mounts have not been reproduced; Mac server actions use system URL handlers",
+    "Cross-volume moves do not yet provide fine-grained in-flight cancellation",
+    "Failures producing no output are not yet persisted as standalone failed history entries",
+    "Connections dialog does not refresh while open; the storage bar refreshes separately",
+    "Not every Linux reachable state or macOS external drag-and-drop permutation was retested",
+    "AV playback pause/resume with longer media needs a dedicated UI test",
+    "Cloud account authentication and real remote synchronization were not changed or verified"
+  ],
+  "ntfs": {
+    "build_condition": "OPENCOMMANDER_NTFS3G_EXPERIMENTAL",
+    "preflight": "Registered extension found in installed app; FSClient omitted it",
+    "current_write_activation": "not verified by this parity run",
+    "existing_disks_written": false
+  },
+  "safety": {
+    "test_data": "/tmp/OpenCommander-MacParity.RgAWSn",
+    "system_permissions_changed": false,
+    "folder_default_association_changed": false,
+    "concurrent_ios_changes_preserved_and_excluded_from_mac_port_commits": true
+  }
+}

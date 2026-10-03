@@ -2437,6 +2437,14 @@ extension ViewController: UIDocumentPickerDelegate {
             guard let self, !self.operationInProgress, self.presentedViewController == nil else { return }
             DispatchQueue.global(qos: .utility).async {
                 let locations = HostFileSystem.availableStorageLocations()
+                let ejectablePaths = Set(locations.compactMap { location -> String? in
+                    guard location.kind != .cloudStorage, location.url.path.hasPrefix("/Volumes/"),
+                          let values = try? location.url.resourceValues(forKeys: [.volumeURLKey, .volumeIsInternalKey]),
+                          values.volumeIsInternal == false,
+                          (values.allValues[.volumeURLKey] as? URL)?.standardizedFileURL == location.url.standardizedFileURL
+                    else { return nil }
+                    return location.url.path
+                })
                 DispatchQueue.main.async {
                     guard !self.operationInProgress, self.presentedViewController == nil else { return }
                     let alert = UIAlertController(title: L10n.get("connections"),
@@ -2445,7 +2453,7 @@ extension ViewController: UIDocumentPickerDelegate {
                         alert.addAction(UIAlertAction(title: "\(L10n.get("open")): \(location.name)", style: .default) { _ in
                             self.openLocation(location.url, in: self.activePane ?? self.leftPane)
                         })
-                        if location.kind != .cloudStorage && location.url.path.hasPrefix("/Volumes/") {
+                        if ejectablePaths.contains(location.url.path) {
                             alert.addAction(UIAlertAction(title: "\(L10n.get("eject_volume")): \(location.name)", style: .default) { _ in
                                 self.showProgress(L10n.get("eject_volume"), progress: 0)
                                 bridge.ejectVolume(location.url) { error in
