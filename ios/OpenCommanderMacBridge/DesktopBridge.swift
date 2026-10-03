@@ -6,6 +6,12 @@ import UniformTypeIdentifiers
 final class DesktopBridge: NSObject, DesktopBridgeProtocol {
     private var applicationPanel: NSOpenPanel?
 
+    func setFolderApplication(_ application: URL, completion: @escaping (NSError?) -> Void) {
+        NSWorkspace.shared.setDefaultApplication(at: application, toOpen: .folder) { error in
+            DispatchQueue.main.async { completion(error as NSError?) }
+        }
+    }
+
     func openFile(_ url: URL, application: URL?, completion: @escaping (Bool, NSError?) -> Void) {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true

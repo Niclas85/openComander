@@ -9,6 +9,16 @@ func fail(_ message: String, code: Int32) -> Never {
 
 let expected = "com.github.niklaus85.OpenCommander.NTFSModule"
 
+// Registration alone does not mean this build implements loadResource().
+// Ordinary builds intentionally return ENOTSUP. Detect that before creating an image.
+let installedInfo = URL(fileURLWithPath:
+    "/Applications/OpenCommander.app/Contents/Extensions/OpenCommanderNTFSModule.appex/Contents/Info.plist")
+guard let data = try? Data(contentsOf: installedInfo),
+      let info = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any],
+      info["OpenCommanderNTFSWriteCondition"] as? String == "OPENCOMMANDER_NTFS3G_EXPERIMENTAL" else {
+    fail("The installed app has no verified experimental NTFS write build. Registration/permissions cannot enable code omitted at build time. Build with sh ntfs/NTFS3G/build-experimental-app.sh and explicitly install that app. No image created.", code: 6)
+}
+
 func checkRegistrationFallback() {
     // On macOS 15.6 FSClient can omit this module even when mount -F starts
     // and activates it. Absence from that API alone is not a consent failure.

@@ -243,7 +243,11 @@ private final class CompactActionToolbar: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override var intrinsicContentSize: CGSize {
+#if targetEnvironment(macCatalyst)
+        CGSize(width: UIView.noIntrinsicMetric, height: 36)
+#else
         CGSize(width: UIView.noIntrinsicMetric, height: 28)
+#endif
     }
 
     override func layoutSubviews() {
@@ -258,7 +262,11 @@ private final class CompactActionToolbar: UIView {
         let spacing = CGFloat(max(0, buttons.count - 1)) * gap
         // Keep every complete localized label in one row, including Move.
         // Use one shared font size so longer translations remain consistent.
+#if targetEnvironment(macCatalyst)
+        var fontSize: CGFloat = 13
+#else
         var fontSize: CGFloat = 10
+#endif
         var sizes = widths(fontSize: fontSize)
         while sizes.reduce(0, +) + spacing > bounds.width && fontSize > 1 {
             fontSize -= 0.1
@@ -329,7 +337,7 @@ class ViewController: UIViewController {
                 buttonBorder = UIColor(hex: "#2B2D31")
                 buttonText = UIColor(hex: "#DBDEE1")
             } else {
-                selectionBackground = UIColor(hex: "#FFF4D8")
+                selectionBackground = UIColor(hex: "#E4EFFC")
                 appBackground = UIColor(hex: "#E8EAED")
                 headerBackground = UIColor(hex: "#FFFFFF")
                 headerText = UIColor(hex: "#202124")
@@ -422,7 +430,7 @@ class ViewController: UIViewController {
 #endif
         
         leftPane = CommanderPane(title: "1", root: FileEntry(url: leftURL, parent: nil), accent: "#1E66C1", viewController: self)
-        rightPane = CommanderPane(title: "2", root: FileEntry(url: rightURL, parent: nil), accent: "#1F8A5B", viewController: self)
+        rightPane = CommanderPane(title: "2", root: FileEntry(url: rightURL, parent: nil), accent: "#1E66C1", viewController: self)
         activePane = leftPane
         
         buildLayout()
@@ -461,6 +469,8 @@ class ViewController: UIViewController {
     }
 
     private func buildLayout() {
+        view.overrideUserInterfaceStyle = darkMode ? .dark : .light
+        view.tintColor = .systemBlue
         self.view.subviews.forEach { $0.removeFromSuperview() }
         theme = ThemeColors(darkMode: darkMode)
         self.view.semanticContentAttribute = L10n.isRightToLeft ? .forceRightToLeft : .forceLeftToRight
@@ -595,6 +605,9 @@ class ViewController: UIViewController {
         title.text = L10n.get("app_name")
         title.textColor = theme.headerText
         title.font = UIFont.boldSystemFont(ofSize: landscape ? 14 : 17)
+#if targetEnvironment(macCatalyst)
+        title.font = .systemFont(ofSize: 17, weight: .semibold)
+#endif
         title.adjustsFontSizeToFitWidth = true
         title.minimumScaleFactor = 0.7
         let titleRow = UIStackView(arrangedSubviews: [title])
@@ -657,6 +670,9 @@ class ViewController: UIViewController {
         for button in [helpButton, legalButton, languageButton!] {
             button.constraints.filter { $0.firstAttribute == .height }.forEach { $0.isActive = false }
             button.titleLabel?.font = .systemFont(ofSize: 10)
+#if targetEnvironment(macCatalyst)
+            button.titleLabel?.font = .systemFont(ofSize: 12)
+#endif
             button.titleLabel?.numberOfLines = 1
             button.contentEdgeInsets = UIEdgeInsets(top: 4, left: 6, bottom: 4, right: 6)
             button.heightAnchor.constraint(equalToConstant: 28).isActive = true
@@ -665,6 +681,11 @@ class ViewController: UIViewController {
         }
 #if targetEnvironment(macCatalyst)
         openFolderButton = miniButton(label: L10n.get("drives"))
+        let preferencesButton = miniButton(label: L10n.get("folder_default_title"))
+        preferencesButton.setImage(UIImage(systemName: "folder.badge.gearshape"), for: .normal)
+        preferencesButton.accessibilityIdentifier = "FolderDefaultButton"
+        preferencesButton.addTarget(self, action: #selector(showFolderDefaultPreferences), for: .touchUpInside)
+        titleRow.addArrangedSubview(preferencesButton)
 #else
         openFolderButton = miniButton(label: L10n.get("choose_folder"))
 #endif
@@ -770,6 +791,9 @@ class ViewController: UIViewController {
         button.titleLabel?.textAlignment = .center
         button.layer.cornerRadius = 8
         button.layer.borderWidth = 1
+        button.backgroundColor = theme.buttonBackground
+        button.layer.borderColor = theme.buttonBorder.cgColor
+        button.setTitleColor(theme.buttonText, for: .normal)
         button.contentEdgeInsets = UIEdgeInsets(top: 0, left: dp(10), bottom: 0, right: dp(10))
         button.translatesAutoresizingMaskIntoConstraints = false
         button.heightAnchor.constraint(greaterThanOrEqualToConstant: dp(44)).isActive = true
@@ -795,6 +819,11 @@ class ViewController: UIViewController {
     }
 
     private func tintButton(button: UIButton, lightFill: String, lightStroke: String, lightText: String, darkFill: String, darkStroke: String, darkText: String) {
+#if targetEnvironment(macCatalyst)
+        button.backgroundColor = theme.buttonBackground
+        button.layer.borderColor = theme.buttonBorder.cgColor
+        button.setTitleColor(button === deleteButton ? .systemRed : theme.buttonText, for: .normal)
+#else
         let fill = darkMode ? darkFill : lightFill
         let stroke = darkMode ? darkStroke : lightStroke
         let text = darkMode ? darkText : lightText
@@ -802,6 +831,7 @@ class ViewController: UIViewController {
         button.backgroundColor = UIColor(hex: fill)
         button.layer.borderColor = UIColor(hex: stroke).cgColor
         button.setTitleColor(UIColor(hex: text), for: .normal)
+#endif
     }
 }
 
@@ -1070,8 +1100,70 @@ extension ViewController {
         present(viewer, animated: true)
     }
 
+    // Folder open events are kept in-app; never forward them back to the default
+    // handler (which may be this app), avoiding a Launch Services recursion.
+    func openIncomingFolder(_ url: URL) -> Bool {
+        let scoped = url.startAccessingSecurityScopedResource()
+        guard HostFileSystem.isDirectory(url),
+              (try? url.resourceValues(forKeys: [.isPackageKey]).isPackage) != true,
+              let pane = activePane ?? leftPane else {
+            if scoped { url.stopAccessingSecurityScopedResource() }
+            return false
+        }
+        if scoped { securityScopedURLs.append(url) }
+        openLocation(url, in: pane)
+        return true
+    }
+
+#if targetEnvironment(macCatalyst)
+    @objc private func showFolderDefaultPreferences() {
+        presentFolderDefaultChoice(firstRun: false)
+    }
+
+    private func presentFolderDefaultChoice(firstRun: Bool) {
+        guard presentedViewController == nil else { return }
+        let alert = UIAlertController(title: L10n.get("folder_default_title"),
+            message: L10n.get("folder_default_message"), preferredStyle: .alert)
+        func rememberChoice() {
+            UserDefaults.standard.set(true, forKey: "mac_folder_default_prompt_v1")
+        }
+        alert.addAction(UIAlertAction(title: L10n.get("folder_default_accept"), style: .default) { _ in
+            rememberChoice()
+            self.dismiss(animated: true) { self.changeFolderDefault(to: Bundle.main.bundleURL) }
+        })
+        if !firstRun {
+            alert.addAction(UIAlertAction(title: L10n.get("folder_default_finder"), style: .default) { _ in
+                self.dismiss(animated: true) {
+                    self.changeFolderDefault(to: URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app"))
+                }
+            })
+        }
+        alert.addAction(UIAlertAction(title: L10n.get("later"), style: .cancel) { _ in
+            rememberChoice()
+            if firstRun { self.dismiss(animated: true) { self.maybeShowFirstRunHelp() } }
+        })
+        present(alert, animated: true)
+    }
+
+    private func changeFolderDefault(to application: URL) {
+        guard let bridge = DesktopBridge.shared else {
+            showScrollableDialog(title: L10n.get("folder_default_title"), message: L10n.get("desktop_bridge_unavailable"))
+            return
+        }
+        bridge.setFolderApplication(application) { [weak self] error in
+            guard let self else { return }
+            self.showScrollableDialog(title: L10n.get("folder_default_title"),
+                message: error?.localizedDescription ?? L10n.get("folder_default_success"))
+        }
+    }
+#endif
+
     func maybeShowFirstRunHelp() {
 #if targetEnvironment(macCatalyst)
+        if !UserDefaults.standard.bool(forKey: "mac_folder_default_prompt_v1") {
+            DispatchQueue.main.async { self.presentFolderDefaultChoice(firstRun: true) }
+            return
+        }
         let fullDiskKey = "mac_full_disk_access_onboarding_shown"
         DispatchQueue.global(qos: .utility).async {
             let status = HostFileSystem.fullDiskAccessStatus()

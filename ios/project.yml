@@ -31,6 +31,11 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSSupportsOpeningDocumentsInPlace: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Folder
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.folder]
         LSApplicationCategoryType: public.app-category.utilities
         NSDesktopFolderUsageDescription: OpenCommander needs access to manage files on your Desktop.
         NSDocumentsFolderUsageDescription: OpenCommander needs access to manage files in Documents.
@@ -112,6 +117,7 @@ targets:
     info:
       path: OpenCommanderNTFSModule/Info.plist
       properties:
+        OpenCommanderNTFSWriteCondition: $(OPENCOMMANDER_NTFS_WRITE_CONDITION)
         CFBundleDisplayName: OpenCommander NTFS
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)

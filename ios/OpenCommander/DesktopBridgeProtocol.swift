@@ -4,6 +4,7 @@ import Foundation
 @objc(OpenCommanderDesktopBridgeProtocol)
 protocol DesktopBridgeProtocol {
     init()
+    func setFolderApplication(_ application: URL, completion: @escaping (NSError?) -> Void)
     func openFile(_ url: URL, application: URL?, completion: @escaping (Bool, NSError?) -> Void)
     func chooseApplication(for url: URL, title: String, completion: @escaping (Bool, NSError?) -> Void)
 }

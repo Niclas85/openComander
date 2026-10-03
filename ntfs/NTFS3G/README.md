@@ -24,15 +24,39 @@ universal/Intel release packaging has not been verified.
 To build the opt-in macOS prototype after building the engine:
 
 ```sh
-xcodebuild -project ios/OpenCommander.xcodeproj -scheme OpenCommanderNTFSModule \
-  -configuration Debug -destination 'platform=macOS,arch=arm64' \
-  SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG OPENCOMMANDER_NTFS3G_EXPERIMENTAL' \
-  ONLY_ACTIVE_ARCH=YES build
+sh ntfs/NTFS3G/build-experimental-app.sh
 ```
 
 The scheme also builds its containing Catalyst app. No automatic claim of
 NTFS devices is configured (`FSMediaTypes` is empty). The ordinary build still
 refuses mounts. Do not turn the experimental build into the default release.
+
+The script keeps a separate DerivedData directory and uses one explicit setting
+for the Swift compilation condition and an installed Info.plist capability
+marker. It verifies that marker and the signature, but does not install, grant
+permissions or mount disks. Install its printed app explicitly at
+`/Applications/OpenCommander.app` before running the FSKit tests. The preflight
+now checks this exact installed app and rejects ordinary/legacy unmarked builds
+before allocating a test image. Other installation locations are not supported
+by this test workflow. After an ordinary app update, repeat this check: enabling
+the extension in Settings cannot restore code omitted from that build.
+
+On 12 September the ordinary installed build reproduced `Operation not
+supported` from loadResource (exit 69), not the earlier task-launch failure.
+The extension was registered but had been rebuilt without the experimental
+condition. A new 64 MiB fixture was used and detached; no physical disk changed.
+
+The corrected experimental app was then built, signature-verified and installed
+locally, retaining a backup of the previous app. The full FSKit test passed on
+12 September: mount, Unicode, create/read/write, copy, rename, replace, delete,
+truncate and fsync, followed by clean detach and independent Apple NTFS read-only
+verification. Fixture: `.build-native/fskit-fixture.bH63ek/test.ntfs`.
+This resolves the reproduced build-mode regression, not the production safety
+gates below. The public GitHub preview remains unchanged and lacks this extension.
+Automatic remounting of physical NTFS media is still deliberately disabled.
+A second fresh image (`.build-native/fskit-fixture.pHQfb2/test.ntfs`) passed the
+same full sequence immediately afterwards. Both images were detached normally.
+No sudo, permission reset, system-daemon restart or physical-disk write was used.
 
 ## Observed results (8 September 2026)
 

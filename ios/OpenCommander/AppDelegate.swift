@@ -5,6 +5,13 @@ import ZIPFoundation
 class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
+    func application(_ app: UIApplication, open url: URL,
+                     options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        guard url.isFileURL, let controller = window?.rootViewController as? ViewController else { return false }
+        controller.loadViewIfNeeded()
+        return controller.openIncomingFolder(url)
+    }
+
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
 #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--reset-file-access-onboarding") {
