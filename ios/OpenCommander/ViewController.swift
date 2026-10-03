@@ -1338,9 +1338,24 @@ extension ViewController {
     }
 
     private func maybeShowIOSFileAccessOnboarding() {
-#if !targetEnvironment(macCatalyst)
-        DispatchQueue.main.async { [weak self] in self?.presentStorageSources() }
-#endif
+        let key = "ios_file_access_onboarding_v2_shown"
+        guard !UserDefaults.standard.bool(forKey: key) else {
+            maybeShowGeneralFirstRunHelp()
+            return
+        }
+        UserDefaults.standard.set(true, forKey: key)
+
+        let alert = UIAlertController(
+            title: L10n.get("storage_title"),
+            message: L10n.get("storage_message") + "\n\n" + L10n.get("help_access_ios"),
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: L10n.get("choose_folder"), style: .default) { _ in
+            self.folderPickerAppliesToBothPanes = true
+            self.presentFolderPicker()
+        })
+        alert.addAction(UIAlertAction(title: L10n.get("later"), style: .cancel))
+        DispatchQueue.main.async { self.present(alert, animated: true) }
     }
 
     private func maybeShowGeneralFirstRunHelp() {
@@ -2339,63 +2354,37 @@ extension ViewController: UIDocumentPickerDelegate {
         }
         present(alert, animated: true)
 #else
-        presentStorageSources()
+        let alert = UIAlertController(
+            title: L10n.get("media_locations"),
+            message: L10n.get("media_access_note"),
+            preferredStyle: .actionSheet
+        )
+        alert.addAction(UIAlertAction(title: L10n.get("media_folder"), style: .default) { _ in
+            self.openLocalMediaFolder()
+        })
+        alert.addAction(UIAlertAction(title: L10n.get("import_photos_videos"), style: .default) { _ in
+            self.presentPhotoVideoPicker()
+        })
+        alert.addAction(UIAlertAction(title: L10n.get("music_library_read_only"), style: .default) { _ in
+            self.presentMusicPicker()
+        })
+        alert.addAction(UIAlertAction(title: L10n.get("local_documents"), style: .default) { _ in
+            let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            self.openLocation(documents, in: self.activePane ?? self.leftPane, persistPath: false)
+        })
+        alert.addAction(UIAlertAction(title: L10n.get("choose_another_folder"), style: .default) { _ in
+            self.presentFolderPicker()
+        })
+        alert.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel))
+        if let popover = alert.popoverPresentationController {
+            popover.sourceView = openFolderButton ?? view
+            popover.sourceRect = (openFolderButton ?? view).bounds
+        }
+        present(alert, animated: true)
 #endif
     }
 
 #if !targetEnvironment(macCatalyst)
-    private func presentStorageSources() {
-        guard presentedViewController == nil else { return }
-        let sources = StorageSourcesController(style: .insetGrouped)
-        sources.chooseFolder = { [weak self] in self?.presentFolderPicker() }
-        sources.localFiles = { [weak self] in
-            guard let self else { return }
-            let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            self.openLocation(documents, in: self.activePane ?? self.leftPane, persistPath: false)
-        }
-        sources.importedFiles = { [weak self] in self?.openLocalMediaFolder() }
-        sources.importMedia = { [weak self] in self?.presentPhotoVideoPicker() }
-        var saved = UserDefaults.standard.dictionary(forKey: "media_connected_folders") as? [String: Data] ?? [:]
-        for pane in [leftPane, rightPane].compactMap({ $0 }) {
-            if let url = restoreFolderLocation(forPane: pane.title),
-               let data = UserDefaults.standard.data(forKey: bookmarkKey(forPane: pane.title)) {
-                saved[url.path] = data
-            }
-        }
-        UserDefaults.standard.set(saved, forKey: "media_connected_folders")
-        for (path, data) in saved.sorted(by: { $0.key.localizedStandardCompare($1.key) == .orderedAscending }) {
-            sources.locations.append(.init(title: URL(fileURLWithPath: path).lastPathComponent, open: { [weak self] in
-                guard let self else { return }
-                do {
-                    var stale = false
-                    let url = try URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
-                    let scoped = url.startAccessingSecurityScopedResource()
-                    if scoped {
-                        if self.securityScopedURLs.contains(url) { url.stopAccessingSecurityScopedResource() }
-                        else { self.securityScopedURLs.append(url) }
-                    }
-                    _ = try HostFileSystem.directoryContents(at: url, showHidden: false)
-                    if stale, let renewed = try? url.bookmarkData(options: [.minimalBookmark], includingResourceValuesForKeys: nil, relativeTo: nil) {
-                        var folders = UserDefaults.standard.dictionary(forKey: "media_connected_folders") as? [String: Data] ?? [:]
-                        folders[path] = renewed; UserDefaults.standard.set(folders, forKey: "media_connected_folders")
-                    }
-                    self.saveFolderBookmark(url, forPane: (self.activePane ?? self.leftPane).title)
-                    self.openLocation(url, in: self.activePane ?? self.leftPane, persistPath: false)
-                } catch { self.showFolderAccessFailure(error) }
-            }, forget: {
-                var folders = UserDefaults.standard.dictionary(forKey: "media_connected_folders") as? [String: Data] ?? [:]
-                folders.removeValue(forKey: path); UserDefaults.standard.set(folders, forKey: "media_connected_folders")
-                for title in ["1", "2"] {
-                    if UserDefaults.standard.data(forKey: "folder_bookmark_pane_\(title)") == data {
-                        UserDefaults.standard.removeObject(forKey: "folder_bookmark_pane_\(title)")
-                    }
-                }
-            }))
-        }
-        let navigation = UINavigationController(rootViewController: sources)
-        navigation.modalPresentationStyle = .fullScreen
-        present(navigation, animated: true)
-    }
 
     private func localMediaFolderURL() throws -> URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -2610,14 +2599,7 @@ extension ViewController: UIDocumentPickerDelegate {
             return
         }
         if startedSecurityScope { securityScopedURLs.append(url) }
-#if !targetEnvironment(macCatalyst)
-        if let data = try? url.bookmarkData(options: [.minimalBookmark], includingResourceValuesForKeys: nil, relativeTo: nil) {
-            var saved = UserDefaults.standard.dictionary(forKey: "media_connected_folders") as? [String: Data] ?? [:]
-            saved[url.path] = data; UserDefaults.standard.set(saved, forKey: "media_connected_folders")
-        }
-#endif
         if folderPickerAppliesToBothPanes {
-            UserDefaults.standard.set(true, forKey: "ios_main_folder_onboarding_v3_completed")
             folderPickerAppliesToBothPanes = false
             for targetPane in [leftPane, rightPane].compactMap({ $0 }) {
                 saveFolderBookmark(url, forPane: targetPane.title)
