@@ -36,3 +36,16 @@ release/*.apk.sha256
 /linux/artifacts/
 /linux/*.spec
 .pytest_cache/
+
+# Generated local UI snapshots and source-extraction output.
+/app_screenshot.png
+/entered_testfolder.png
+/testfolder_screenshot.png
+/ios/sim2.png
+/ios/sim3.png
+/ios/sim_screenshot.png
+/ios/test_result.png
+/ios/dom.xml
+/ios/patch.xml
+/methods.txt
+/swift_strings.txt

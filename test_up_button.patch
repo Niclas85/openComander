@@ -1,0 +1,25 @@
+--- /Users/niklaus/Documents/openComander/ios/OpenCommander/Pane.swift
++++ /Users/niklaus/Documents/openComander/ios/OpenCommander/Pane.swift
+@@ -206,6 +206,23 @@
+     }
+ 
++    private func isEntryInside(_ parent: FileEntry, _ child: FileEntry) -> Bool {
++        var cursor: FileEntry? = child
++        while let c = cursor {
++            if c.key() == parent.key() { return true }
++            cursor = c.parent
++        }
++        return false
++    }
++
+     func openDirectory(_ directory: FileEntry) {
+         currentDirectory = directory
++        if !isEntryInside(rootNode.entry, directory) {
++            // Navigated above root node, so reset root node
++            rootNode = TreeNode(entry: directory, depth: 0)
++            rootNode.expanded = true
++            loadChildren(for: rootNode)
++        }
+         rebuildTree()
+         refreshFiles()
+     }

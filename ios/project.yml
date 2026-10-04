@@ -28,6 +28,7 @@ targets:
     info:
       path: Info.plist
       properties:
+        OneDriveClientID: 215df982-ff55-4272-9125-beacc651b2c3
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSSupportsOpeningDocumentsInPlace: true
@@ -41,7 +42,9 @@ targets:
         NSDocumentsFolderUsageDescription: OpenCommander needs access to manage files in Documents.
         NSDownloadsFolderUsageDescription: OpenCommander needs access to manage files in Downloads.
         NSRemovableVolumesUsageDescription: OpenCommander needs access to manage files on external drives.
-        NSAppleMusicUsageDescription: OpenCommander uses access to your media library only when you choose music to play inside the app.
+        NSPhotoLibraryUsageDescription: OpenCommander displays your permitted photos, videos and albums, and exports selected items to a folder you choose.
+        PHPhotoLibraryPreventAutomaticLimitedAccessAlert: true
+        NSAppleMusicUsageDescription: OpenCommander displays your music library and plays selected songs. Only locally available, unprotected songs can be exported.
         ITSAppUsesNonExemptEncryption: false
         UIFileSharingEnabled: true
         UILaunchScreen: {}
@@ -61,12 +64,13 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: "YES"
         PRODUCT_BUNDLE_IDENTIFIER: com.github.niklaus85.OpenCommander
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": OpenCommander/OpenCommanderMac.entitlements
         SWIFT_VERSION: 5.0
         DEVELOPMENT_TEAM: WB497999XX
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: 1.2
-        CURRENT_PROJECT_VERSION: 8
+        MARKETING_VERSION: 1.3
+        CURRENT_PROJECT_VERSION: 9
         SUPPORTS_MACCATALYST: "YES"
         DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER: "NO"
       configs:
@@ -150,8 +154,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.github.niklaus85.OpenCommander.NTFSModule
         PRODUCT_NAME: OpenCommanderNTFSModule
         INFOPLIST_KEY_CFBundleDisplayName: OpenCommander NTFS
-        MARKETING_VERSION: 1.2
-        CURRENT_PROJECT_VERSION: 8
+        MARKETING_VERSION: 1.3
+        CURRENT_PROJECT_VERSION: 9
         SKIP_INSTALL: "YES"
         SWIFT_VERSION: 5.0
         DEVELOPMENT_TEAM: WB497999XX

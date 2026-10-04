@@ -1,6 +1,6 @@
 # Datenschutzerklärung für OpenCommander
 
-Stand: 23. August 2026
+Stand: 3. Oktober 2026
 
 ## Verantwortlicher
 
@@ -34,6 +34,14 @@ Die App benötigt Dateizugriff, damit die Kernfunktionen eines Dateimanagers fun
 - Rückgängigmachen von Dateioperationen über die Historie
 
 Der Dateizugriff erfolgt lokal und nur für Funktionen, die der Nutzer auslöst.
+
+## Mediatheken und iOS-Berechtigungen
+
+Auf iPhone und iPad kann OpenCommander über Apples PhotoKit-Schnittstelle die vom Nutzer freigegebenen Fotos, Videos und Alben anzeigen. Der Nutzer kann vollständigen oder eingeschränkten Zugriff erlauben und diese Freigabe in den iOS-Einstellungen ändern. Die App verändert oder löscht die Originale in der Fotomediathek nicht. Beim Export werden ausgewählte Medien als Kopien an einem vom Nutzer gewählten Speicherort gespeichert. Temporäre Exportkopien verbleiben lokal und werden nach Abschluss, Abbruch oder beim nächsten App-Start aufgeräumt.
+
+Nach Freigabe des Zugriffs auf „Medien & Apple Music“ kann OpenCommander die Musikmediathek über Apples MediaPlayer-Schnittstelle anzeigen und ausgewählte Titel abspielen. Dazu werden lokal Titel, Künstler, Alben und Cover verwendet. Nur lokal verfügbare, ungeschützte Audiodateien können exportiert werden; geschützte Titel oder Titel ohne exportierbare Datei werden nicht als Dateien ausgegeben. Die Wiedergabe wird beim Verlassen der Musikansicht gestoppt.
+
+Inhalte und Metadaten dieser Mediatheken werden nicht an den Anbieter übertragen. Für Dateien aus iCloud Drive, anderen Dateianbietern oder nur online gespeicherte Medien können Apples Systemdienste beziehungsweise der vom Nutzer ausgewählte Anbieter eine Internetverbindung verwenden. Für diese Dienste gelten zusätzlich die Datenschutzbedingungen des jeweiligen Anbieters. OpenCommander betreibt dafür keinen eigenen Server und keine eigene Cloud-Synchronisation.
 
 ## Rückgängig-Historie und Cache
 

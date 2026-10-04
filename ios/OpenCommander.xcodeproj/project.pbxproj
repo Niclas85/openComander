@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        0D0420261004000000000001 /* OneDriveClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D0420261004000000000002; };
+        0D0420261004000000000003 /* OneDriveBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D0420261004000000000004; };
+        AABB20261003000000000001 /* MediaLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABB20261003000000000002; };
 		5AFE00000000000000000001 /* FileOperationSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AFE00000000000000000002 /* FileOperationSafety.swift */; };
         A66000000000000000000001 = {isa = PBXBuildFile; fileRef = A66000000000000000000011; };
         A66000000000000000000002 = {isa = PBXBuildFile; fileRef = A66000000000000000000011; };
@@ -82,6 +85,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        0D0420261004000000000002 /* OneDriveClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveClient.swift; sourceTree = "<group>"; };
+        0D0420261004000000000004 /* OneDriveBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveBrowser.swift; sourceTree = "<group>"; };
+        AABB20261003000000000002 /* MediaLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibrary.swift; sourceTree = "<group>"; };
 		5AFE00000000000000000002 /* FileOperationSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileOperationSafety.swift; sourceTree = "<group>"; };
         A66000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopBridgeProtocol.swift; sourceTree = "<group>"; };
         A66000000000000000000012 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCommanderMacBridge/DesktopBridge.swift; sourceTree = SOURCE_ROOT; };
@@ -159,6 +165,8 @@
 		0E1A43017A3ABCF26CDACD2B /* OpenCommander */ = {
 			isa = PBXGroup;
 			children = (
+                0D0420261004000000000002 /* OneDriveClient.swift */,
+                0D0420261004000000000004 /* OneDriveBrowser.swift */,
 				4446BB5DED9CF5F765ACB678 /* AppDelegate.swift */,
                 A66000000000000000000011,
                 A66000000000000000000012,
@@ -185,6 +193,7 @@
 				94CC4B1913961E80450FB1DF /* Pane.swift */,
 				C0673250B7AD71D850FB70ED /* PrivacyInfo.xcprivacy */,
 				BBE743717A2C7E13A6D5D574 /* ViewController.swift */,
+                AABB20261003000000000002 /* MediaLibrary.swift */,
 			);
 			path = OpenCommander;
 			sourceTree = "<group>";
@@ -422,6 +431,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                0D0420261004000000000001 /* OneDriveClient.swift in Sources */,
+                0D0420261004000000000003 /* OneDriveBrowser.swift in Sources */,
 				D78142BF3E7FB6427ADC9A63 /* AppDelegate.swift in Sources */,
 				510EFA53657E909B5C734B36 /* FileEntry.swift in Sources */,
 				DAD000000000000000000001 /* FileDropTransfer.swift in Sources */,
@@ -432,6 +443,7 @@
 				8BC681367A8954F0784955B7 /* MacFileSystem.swift in Sources */,
 				97349B0FB0B561EFF33A37DC /* Pane.swift in Sources */,
 				03F20A0170EF4FB72D8E8C02 /* ViewController.swift in Sources */,
+                AABB20261003000000000001 /* MediaLibrary.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -462,7 +474,7 @@
 				CODE_SIGN_ENTITLEMENTS = OpenCommanderNTFSModule/OpenCommanderNTFSModule.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = WB497999XX;
 				ENABLE_APP_SANDBOX = YES;
 				INFOPLIST_FILE = OpenCommanderNTFSModule/Info.plist;
@@ -473,7 +485,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.4;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.github.niklaus85.OpenCommander.NTFSModule;
 				PRODUCT_NAME = OpenCommanderNTFSModule;
 				SDKROOT = macosx;
@@ -486,9 +498,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = OpenCommander/OpenCommanderMac.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = WB497999XX;
 				GENERATE_INFOPLIST = YES;
@@ -500,7 +513,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.github.niklaus85.OpenCommander;
 				PROVISIONING_PROFILE_SPECIFIER = "OpenCommander App Store";
 				SDKROOT = iphoneos;
@@ -535,9 +548,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = OpenCommander/OpenCommanderMac.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = WB497999XX;
 				GENERATE_INFOPLIST = YES;
@@ -549,7 +563,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.github.niklaus85.OpenCommander;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = YES;
@@ -701,7 +715,7 @@
 				CODE_SIGN_ENTITLEMENTS = OpenCommanderNTFSModule/OpenCommanderNTFSModule.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = WB497999XX;
 				ENABLE_APP_SANDBOX = YES;
 				INFOPLIST_FILE = OpenCommanderNTFSModule/Info.plist;
@@ -712,7 +726,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.4;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.github.niklaus85.OpenCommander.NTFSModule;
 				PRODUCT_NAME = OpenCommanderNTFSModule;
 				SDKROOT = macosx;

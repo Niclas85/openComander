@@ -13,9 +13,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+#if !targetEnvironment(macCatalyst)
+        MediaExportFiles.cleanInterruptedExports()
+#endif
 #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--reset-file-access-onboarding") {
             UserDefaults.standard.removeObject(forKey: "ios_file_access_onboarding_v2_shown")
+            UserDefaults.standard.removeObject(forKey: "ios_main_folder_onboarding_v3_completed")
         }
         if ProcessInfo.processInfo.arguments.contains("--app-review-fixtures") {
             prepareAppReviewFixtures()
@@ -80,8 +84,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     private func resetMediaImportFixtures() {
+#if targetEnvironment(simulator)
         guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
         try? FileManager.default.removeItem(at: documents.appendingPathComponent("Media", isDirectory: true))
+#endif
     }
 
     private func prepareImageViewerFixtures() {

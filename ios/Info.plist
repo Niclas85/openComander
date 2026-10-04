@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>OneDriveClientID</key>
+	<string>215df982-ff55-4272-9125-beacc651b2c3</string>
 	<key>CFBundleDocumentTypes</key>
 	<array><dict>
 		<key>CFBundleTypeName</key><string>Folder</string>
@@ -39,8 +41,12 @@
 	<string>OpenCommander needs access to manage files in Downloads.</string>
 	<key>NSRemovableVolumesUsageDescription</key>
 	<string>OpenCommander needs access to manage files on external drives.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>OpenCommander displays your permitted photos, videos and albums, and exports selected items to a folder you choose.</string>
+	<key>PHPhotoLibraryPreventAutomaticLimitedAccessAlert</key>
+	<true/>
 	<key>NSAppleMusicUsageDescription</key>
-	<string>OpenCommander uses access to your media library only when you choose music to play inside the app.</string>
+	<string>OpenCommander displays your music library and plays selected songs. Only locally available, unprotected songs can be exported.</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>UILaunchScreen</key>
