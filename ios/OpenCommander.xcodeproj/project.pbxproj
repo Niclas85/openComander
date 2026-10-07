@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C07020261007000000000002 /* CommanderToolsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C07020261007000000000012 /* CommanderToolsController.swift */; };
+		C07020261007000000000001 /* CommanderTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = C07020261007000000000011 /* CommanderTools.swift */; };
         0D0420261004000000000001 /* OneDriveClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D0420261004000000000002; };
         0D0420261004000000000003 /* OneDriveBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D0420261004000000000004; };
         AABB20261003000000000001 /* MediaLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABB20261003000000000002; };
@@ -85,6 +87,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		C07020261007000000000012 /* CommanderToolsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommanderToolsController.swift; sourceTree = "<group>"; };
+		C07020261007000000000011 /* CommanderTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommanderTools.swift; sourceTree = "<group>"; };
         0D0420261004000000000002 /* OneDriveClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveClient.swift; sourceTree = "<group>"; };
         0D0420261004000000000004 /* OneDriveBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveBrowser.swift; sourceTree = "<group>"; };
         AABB20261003000000000002 /* MediaLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibrary.swift; sourceTree = "<group>"; };
@@ -192,6 +196,8 @@
 				F219C47843C16EA558A06ACE /* MacFileSystem.swift */,
 				94CC4B1913961E80450FB1DF /* Pane.swift */,
 				C0673250B7AD71D850FB70ED /* PrivacyInfo.xcprivacy */,
+				C07020261007000000000011 /* CommanderTools.swift */,
+				C07020261007000000000012 /* CommanderToolsController.swift */,
 				BBE743717A2C7E13A6D5D574 /* ViewController.swift */,
                 AABB20261003000000000002 /* MediaLibrary.swift */,
 			);
@@ -442,6 +448,8 @@
 				4A64E77E26EC97CD38490ED8 /* Localization.swift in Sources */,
 				8BC681367A8954F0784955B7 /* MacFileSystem.swift in Sources */,
 				97349B0FB0B561EFF33A37DC /* Pane.swift in Sources */,
+				C07020261007000000000001 /* CommanderTools.swift in Sources */,
+				C07020261007000000000002 /* CommanderToolsController.swift in Sources */,
 				03F20A0170EF4FB72D8E8C02 /* ViewController.swift in Sources */,
                 AABB20261003000000000001 /* MediaLibrary.swift in Sources */,
 			);

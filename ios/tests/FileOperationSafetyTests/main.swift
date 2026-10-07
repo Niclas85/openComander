@@ -188,3 +188,27 @@ if case .cloud(let record) = decodedHistory[1] {
     try check(record == cloudRecord, "cloud history restored without local undo paths")
 } else { fatalError("FAIL: cloud history type changed") }
 print("PASS: mixed local undo and cloud audit history compatibility")
+
+let historyLanguage = L10n.currentLanguage
+L10n.currentLanguage = "de"
+let localizedRecord = FileUndoRecord(source: source, destination: permissionsTarget, replacedBackup: nil)
+localizedRecord.setHistoryError(NSError(domain: NSCocoaErrorDomain, code: 4,
+    userInfo: [NSLocalizedDescriptionKey: "The file could not be moved because it does not exist."]))
+try check(localizedRecord.historyErrorMessage == L10n.get("history_error_missing"), "OS English does not leak into German history")
+let restoredError = try JSONDecoder().decode(FileUndoRecord.self, from: JSONEncoder().encode(localizedRecord))
+L10n.currentLanguage = "en"
+try check(restoredError.historyErrorMessage == L10n.get("history_error_missing"), "Error follows language after persistence")
+L10n.currentLanguage = "de"
+for (domain, code, key) in [(NSCocoaErrorDomain, 513, "history_error_permission"),
+    (NSCocoaErrorDomain, 516, "history_error_exists"), (NSPOSIXErrorDomain, 28, "history_error_space"),
+    ("OpenCommander.FileSafety", 1, "undo_changed"), ("Unknown", 7, "history_error_generic")] {
+    try check(HistoryFailure(NSError(domain: domain, code: code)).message == L10n.get(key), "Localized error code mapping")
+}
+localizedRecord.lastFailure = nil
+localizedRecord.lastError = "English error from an earlier installation"
+var oldJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(localizedRecord)) as! [String: Any]
+oldJSON.removeValue(forKey: "lastFailure")
+let legacyError = try JSONDecoder().decode(FileUndoRecord.self, from: JSONSerialization.data(withJSONObject: oldJSON))
+try check(legacyError.historyErrorMessage == L10n.get("history_error_legacy"), "Old records remain readable and use German explanation")
+L10n.currentLanguage = historyLanguage
+print("PASS: history errors follow app language, stable codes, persistence and legacy compatibility")

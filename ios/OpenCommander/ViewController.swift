@@ -1010,18 +1010,23 @@ class ViewController: UIViewController {
 #if targetEnvironment(macCatalyst)
         let moreActions: [(String, Selector)] = [
             ("new_folder", #selector(createFolder)), ("extract_archive", #selector(extractSelection)),
-            ("preview", #selector(previewSelectedEntry)), ("toggle_hidden", #selector(toggleHiddenFiles))]
+            ("preview", #selector(previewSelectedEntry)), ("toggle_hidden", #selector(toggleHiddenFiles)),
+            ("commander_tools", #selector(showCommanderToolsMenu)),
+            ("commander_search_button", #selector(showCommanderSearch))]
         let extraButtons = moreActions.map { key, action -> UIButton in
             let button = miniButton(label: L10n.get(key))
             button.accessibilityIdentifier = "DesktopAction-\(key)"
+            if key == "commander_search_button" { button.accessibilityIdentifier = "CommanderSearchButton" }
             button.addTarget(self, action: action, for: .touchUpInside)
             if key == "extract_archive" { extractActionButton = button }
             if key == "toggle_hidden" { hiddenActionButton = button }
             return button
         }
         let toolbar = CompactActionToolbar(buttons: [renameButton, extraButtons[0], deleteButton, zipButton,
-            extraButtons[1], extraButtons[2], undoButton, historyButton, extraButtons[3]])
-        for button in [renameButton, extraButtons[2]].compactMap({ $0 }) {
+            extraButtons[1], extraButtons[2], undoButton, historyButton, extraButtons[5], extraButtons[4], extraButtons[3]])
+        tintButton(button: extraButtons[4], lightFill: "#e9f8ef", lightStroke: "#147454", lightText: "#147454",
+            darkFill: "#173f2a", darkStroke: "#79dcb9", darkText: "#79dcb9")
+        for button in [renameButton, extraButtons[2], extraButtons[5]].compactMap({ $0 }) {
             tintButton(button: button, lightFill: "#e8f1ff", lightStroke: "#185bb5", lightText: "#185bb5",
                 darkFill: "#1f344d", darkStroke: "#88baff", darkText: "#88baff")
         }
@@ -1088,6 +1093,9 @@ class ViewController: UIViewController {
             key(L10n.get("cut"), "x", command, #selector(cutSelectionToClipboard)),
             key(L10n.get("paste"), "v", command, #selector(pasteClipboard)),
             key(L10n.get("select_all"), "a", command, #selector(selectAllInActivePane)),
+            key(L10n.get("commander_search"), "f", command, #selector(showCommanderSearch)),
+            key(L10n.get("commander_compare"), "c", [command, .alternate], #selector(showCommanderCompare)),
+            key(L10n.get("commander_rename"), "m", [command, .shift], #selector(showCommanderRename)),
             key(L10n.get("undo"), "z", command, #selector(undoLastOperation)),
             key(L10n.get("refresh"), "r", command, #selector(refreshActivePane)),
             key(L10n.get("new_folder"), "n", [command, .shift], #selector(createFolder)),
@@ -1838,6 +1846,54 @@ extension ViewController {
         }
     }
     
+    @objc func showCommanderToolsMenu() {
+        guard !operationInProgress, presentedViewController == nil else { return }
+        let alert = UIAlertController(title: L10n.get("commander_tools"), message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: L10n.get("commander_compare"), style: .default) { _ in self.showCommanderCompare() })
+        alert.addAction(UIAlertAction(title: L10n.get("commander_rename"), style: .default) { _ in self.showCommanderRename() })
+        alert.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel))
+        present(alert, animated: true)
+    }
+    @objc func showCommanderSearch() { showCommanderTool(.search) }
+    @objc func showCommanderCompare() { showCommanderTool(.compare) }
+    @objc func showCommanderRename() { showCommanderTool(.rename) }
+    private func showCommanderTool(_ mode: CommanderToolsController.Mode) {
+        guard !operationInProgress, let pane = activePane else { return }
+#if targetEnvironment(macCatalyst)
+        guard pane.onlineBrowser == nil, mode != .compare || (leftPane.onlineBrowser == nil && rightPane.onlineBrowser == nil) else {
+            updateGlobalStatus(L10n.get("commander_local_only")); return
+        }
+#endif
+        guard pane.currentDirectory.isPhysical(), mode != .compare || (leftPane.currentDirectory.isPhysical() && rightPane.currentDirectory.isPhysical()) else {
+            updateGlobalStatus(L10n.get("commander_local_only")); return
+        }
+        let selection = pane.selectedEntries().sorted { $0.name().localizedStandardCompare($1.name()) == .orderedAscending }
+        if mode == .rename && (selection.isEmpty || !selection.allSatisfy { $0.isPhysical() }) {
+            updateGlobalStatus(L10n.get("commander_select")); return
+        }
+        let controller = CommanderToolsController(mode: mode,
+            root: mode == .compare ? leftPane.currentDirectory.url : pane.currentDirectory.url,
+            other: rightPane.currentDirectory.url, selected: selection.map(\.url),
+            hidden: UserDefaults.standard.bool(forKey: "show_hidden_files"))
+        controller.overrideUserInterfaceStyle = darkMode ? .dark : .light
+        controller.modalPresentationStyle = .formSheet
+        controller.preferredContentSize = CGSize(width: 940, height: 720)
+        controller.onOpen = { [weak self, weak pane] url in
+            guard let self, let pane else { return }
+            pane.openDirectory(FileEntry(url: url.deletingLastPathComponent(), parent: nil))
+            self.updateGlobalStatus(url.lastPathComponent)
+        }
+        controller.onRename = { [weak self, weak pane] records in
+            guard let self, let pane else { return }
+            if !records.isEmpty { self.operationHistory.append(.move(files: records)) }
+            self.refreshAllPanes(clearSelectionIn: [pane])
+        }
+        // Menu actions dismiss their alert before presenting the tool sheet.
+        if let presented = presentedViewController {
+            presented.dismiss(animated: false) { self.present(controller, animated: true) }
+        } else { present(controller, animated: true) }
+    }
+
     @objc func showRenameDialog() {
 #if targetEnvironment(macCatalyst)
         if let browser = activePane?.onlineBrowser { browser.renameOnlineSelection(); return }
@@ -2397,15 +2453,15 @@ extension ViewController {
                 DispatchQueue.main.async {
                     switch lastOp {
                     case .delete(let files):
-                        files.filter { !$0.completed }.forEach { $0.lastError = error.localizedDescription }
+                        files.filter { !$0.completed }.forEach { $0.setHistoryError(error) }
                         self.operationHistory[index] = .delete(files: files.filter { !$0.completed })
                     case .move(let files):
-                        files.filter { !$0.completed }.forEach { $0.lastError = error.localizedDescription }
+                        files.filter { !$0.completed }.forEach { $0.setHistoryError(error) }
                         self.operationHistory[index] = .move(files: files.filter { !$0.completed })
                     case .copy(let files):
-                        files.filter { !$0.completed }.forEach { $0.lastError = error.localizedDescription }
+                        files.filter { !$0.completed }.forEach { $0.setHistoryError(error) }
                         self.operationHistory[index] = .copy(files: files.filter { !$0.completed })
-                    case .zip(let record), .rename(let record): record.lastError = error.localizedDescription
+                    case .zip(let record), .rename(let record): record.setHistoryError(error)
                     case .cloud: break
                     }
                     // Also persist failed single-item undo/partial retry state.
@@ -2413,7 +2469,7 @@ extension ViewController {
                         UserDefaults.standard.set(data, forKey: "operation_history_v1")
                     }
                     self.refreshAllPanes(clearSelectionIn: [])
-                    self.finishProgress(String(format: L10n.get("undo_failed"), error.localizedDescription))
+                    self.finishProgress(String(format: L10n.get("undo_failed"), HistoryFailure(error).message))
                 }
             }
         }
@@ -2475,6 +2531,7 @@ extension ViewController {
         sections.append(L10n.get("help_open_macos"))
         sections.append(L10n.get("help_cloud_macos"))
         sections.append(L10n.get("help_desktop_parity"))
+        sections.append(L10n.get("commander_help"))
         sections.append(macKeyboardShortcutsHelp())
 #else
         sections.append(L10n.get("help_access_ios"))
@@ -2574,7 +2631,7 @@ extension ViewController {
         historyPanel.addSubview(scroll)
         let stack = UIStackView()
         stack.axis = .vertical
-        stack.spacing = 4
+        stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -2589,7 +2646,7 @@ extension ViewController {
             stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor)
         ])
         // The history scrolls independently and never pushes both file panes away.
-        let height = historyPanel.heightAnchor.constraint(equalToConstant: operationHistory.isEmpty ? 28 : 150)
+        let height = historyPanel.heightAnchor.constraint(equalToConstant: operationHistory.isEmpty ? 36 : 220)
         height.priority = .defaultHigh
         height.isActive = true
         if operationHistory.isEmpty {
@@ -2601,17 +2658,6 @@ extension ViewController {
         } else {
             for index in operationHistory.indices.reversed() {
                 let op = operationHistory[index]
-                if case .cloud(let record) = op {
-                    let label = UILabel()
-                    let date = DateFormatter.localizedString(from: record.createdAt, dateStyle: .short, timeStyle: .short)
-                    label.text = "OneDrive online · \(record.action) · \(date)\n\(record.source) → \(record.destination)"
-                    label.numberOfLines = 0
-                    label.font = .systemFont(ofSize: 12)
-                    label.textColor = theme.primaryText
-                    label.accessibilityIdentifier = "CloudHistoryEntry-\(index)"
-                    stack.addArrangedSubview(label)
-                    continue
-                }
                 let title: String
                 switch op {
                 case .delete(let files): title = String(format: L10n.get("deleted_items"), files.count)
@@ -2619,42 +2665,93 @@ extension ViewController {
                 case .copy(let files): title = String(format: L10n.get("copied_items"), files.count)
                 case .zip(let record): title = String(format: L10n.get("zip_created"), record.destination.lastPathComponent)
                 case .rename(let record): title = String(format: L10n.get("renamed_item"), record.destination.lastPathComponent)
-                case .cloud(let record): title = record.action
+                case .cloud(let record): title = "OneDrive online · " + record.action
                 }
-                let item = miniButton(label: title)
                 let records: [FileUndoRecord]
                 switch op {
                 case .delete(let values), .move(let values), .copy(let values): records = values
                 case .zip(let value), .rename(let value): records = [value]
                 case .cloud: records = []
                 }
-                if let first = records.first {
-                    let date = DateFormatter.localizedString(from: first.createdAt, dateStyle: .short, timeStyle: .short)
-                    let paths = records.map { "\($0.source.path) → \($0.destination.path)" +
-                        ($0.replacedBackup.map { "\n↳ " + $0.path } ?? "") }.joined(separator: "\n")
-                    item.setTitle("\(title) · \(date)\n\(paths)\n↶ \(L10n.get("undo"))", for: .normal)
-                    if let error = records.compactMap(\.lastError).first {
-                        item.setTitle("\(title) · \(date)\n\(paths)\n⚠ \(error)\n↶ \(L10n.get("undo"))", for: .normal)
-                    }
-                    item.titleLabel?.font = .systemFont(ofSize: 12)
-                    item.contentEdgeInsets = UIEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
+                let createdAt: Date?
+                let paths: String
+                let canUndo: Bool
+                if case .cloud(let record) = op {
+                    createdAt = record.createdAt
+                    paths = record.source + " → " + record.destination
+                    canUndo = false // Audit entries do not contain safe remote undo data.
+                } else {
+                    createdAt = records.first?.createdAt
+                    paths = records.map { $0.source.path + " → " + $0.destination.path }.joined(separator: "\n")
+                    canUndo = records.contains { !$0.completed }
                 }
-                item.accessibilityIdentifier = "HistoryEntry-\(index)"
-#if targetEnvironment(macCatalyst)
-                if let media = records.flatMap({ [$0.destination, $0.source] }).first(where: {
-                    SafeFileOperations.exists($0) && UTType(filenameExtension: $0.pathExtension)?.conforms(to: .image) == true
-                }) {
-                    let request = QLThumbnailGenerator.Request(fileAt: media, size: CGSize(width: 32, height: 32), scale: 1, representationTypes: .thumbnail)
-                    QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { [weak item] representation, _ in
-                        guard let representation else { return }
-                        DispatchQueue.main.async { item?.setImage(representation.uiImage, for: .normal) }
-                    }
+                let card = UIView()
+                card.backgroundColor = theme.pathBackground
+                card.layer.cornerRadius = 8
+                card.layer.borderWidth = 1
+                card.layer.borderColor = theme.panelBorder.cgColor
+                card.accessibilityIdentifier = "HistoryEntry-\(index)"
+                let compact = view.bounds.width < 600
+                let row = UIStackView(); row.axis = compact ? .vertical : .horizontal
+                row.spacing = 12; row.alignment = compact ? .fill : .center
+                row.translatesAutoresizingMaskIntoConstraints = false; card.addSubview(row)
+                NSLayoutConstraint.activate([
+                    row.topAnchor.constraint(equalTo: card.topAnchor, constant: 10),
+                    row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -10),
+                    row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 10),
+                    row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -10)])
+                let content = UIStackView(); content.axis = .vertical; content.spacing = 5
+                let heading = UIStackView(); heading.spacing = 5; heading.axis = compact ? .vertical : .horizontal
+                let name = UILabel(); name.text = title; name.font = .systemFont(ofSize: 13, weight: .semibold)
+                name.textColor = theme.primaryText; name.lineBreakMode = .byTruncatingTail
+                let timestamp = UILabel()
+                timestamp.text = createdAt.map { DateFormatter.localizedString(from: $0, dateStyle: .short, timeStyle: .medium) } ?? "—"
+                timestamp.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+                timestamp.textColor = theme.secondaryText
+                timestamp.accessibilityIdentifier = "HistoryTime-\(index)"
+                timestamp.setContentCompressionResistancePriority(.required, for: .horizontal)
+                timestamp.setContentHuggingPriority(.required, for: .horizontal)
+                heading.addArrangedSubview(name); heading.addArrangedSubview(timestamp); content.addArrangedSubview(heading)
+                let location = UILabel(); location.text = paths; location.numberOfLines = 2
+                location.lineBreakMode = .byTruncatingMiddle; location.font = .systemFont(ofSize: 12)
+                location.textColor = theme.secondaryText; content.addArrangedSubview(location)
+                if let error = records.compactMap(\.historyErrorMessage).first {
+                    let warning = UILabel(); warning.text = "⚠ " + error; warning.numberOfLines = 2
+                    warning.font = .systemFont(ofSize: 12); warning.textColor = .systemRed
+                    content.addArrangedSubview(warning)
                 }
-#endif
-                item.contentHorizontalAlignment = .leading
-                item.setTitleColor(theme.primaryText, for: .normal)
-                item.addAction(UIAction { [weak self] _ in self?.undoOperation(at: index) }, for: .touchUpInside)
-                stack.addArrangedSubview(item)
+                if !canUndo {
+                    let hint = UILabel(); hint.text = L10n.get("history_undo_unavailable")
+                    hint.font = .systemFont(ofSize: 11); hint.textColor = theme.secondaryText
+                    content.addArrangedSubview(hint)
+                }
+                row.addArrangedSubview(content)
+                let actions = UIStackView(); actions.spacing = 12; actions.alignment = .center
+                if compact { actions.addArrangedSubview(UIView()) }
+                let details = UIButton(type: .system)
+                details.setImage(UIImage(systemName: "info.circle"), for: .normal)
+                details.accessibilityLabel = L10n.get("history_details")
+                details.accessibilityIdentifier = "HistoryDetails-\(index)"
+                details.widthAnchor.constraint(equalToConstant: 36).isActive = true
+                details.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+                let backupPaths = records.compactMap { $0.replacedBackup?.path }
+                let detailText = [timestamp.text ?? "", paths] + backupPaths + records.compactMap(\.historyErrorMessage)
+                details.addAction(UIAction { [weak self] _ in
+                    guard let self, !self.operationInProgress, self.presentedViewController == nil else { return }
+                    self.showScrollableDialog(title: title, message: detailText.joined(separator: "\n\n"))
+                }, for: .touchUpInside)
+                actions.addArrangedSubview(details)
+                let undo = miniButton(label: "↶ " + L10n.get("undo"))
+                undo.accessibilityIdentifier = "HistoryUndo-\(index)"
+                undo.isEnabled = canUndo && !operationInProgress
+                undo.alpha = canUndo ? 1 : 0.45
+                undo.widthAnchor.constraint(equalToConstant: 140).isActive = true
+                undo.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+                undo.setContentCompressionResistancePriority(.required, for: .horizontal)
+                undo.addAction(UIAction { [weak self] _ in self?.undoOperation(at: index) }, for: .touchUpInside)
+                actions.addArrangedSubview(undo)
+                row.addArrangedSubview(actions)
+                stack.addArrangedSubview(card)
             }
         }
     }

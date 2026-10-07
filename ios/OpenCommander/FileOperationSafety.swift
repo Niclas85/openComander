@@ -209,6 +209,41 @@ enum SafeFileOperations {
     }
 }
 
+/// Store stable error identity, not an OS sentence in the system language.
+/// Render using the current app language, including after restarting/switching language.
+struct HistoryFailure: Codable {
+    let domain: String
+    let code: Int
+    init(_ error: Error) {
+        let value = error as NSError
+        domain = value.domain; code = value.code
+    }
+    var message: String {
+        let key: String
+        if domain == "OpenCommander.FileSafety" { key = "undo_changed" }
+        else if domain == NSCocoaErrorDomain {
+            switch code {
+            case 4, 260: key = "history_error_missing"
+            case 257, 513: key = "history_error_permission"
+            case 516: key = "history_error_exists"
+            case 640: key = "history_error_space"
+            case 3072: key = "history_error_cancelled"
+            default: key = "history_error_generic"
+            }
+        } else if domain == NSPOSIXErrorDomain {
+            switch Int32(code) {
+            case ENOENT: key = "history_error_missing"
+            case EACCES, EPERM, EROFS: key = "history_error_permission"
+            case EEXIST, ENOTEMPTY: key = "history_error_exists"
+            case ENOSPC: key = "history_error_space"
+            case ECANCELED: key = "history_error_cancelled"
+            default: key = "history_error_generic"
+            }
+        } else { key = "history_error_generic" }
+        return L10n.get(key)
+    }
+}
+
 final class FileUndoRecord: Codable {
     let createdAt: Date
     let source: URL
@@ -218,6 +253,17 @@ final class FileUndoRecord: Codable {
     private var destinationReverted = false
     private(set) var completed = false
     var lastError: String?
+    var lastFailure: HistoryFailure?
+    var historyErrorMessage: String? {
+        if let lastFailure { return lastFailure.message }
+        // Legacy histories contain only a language-frozen OS sentence. Without
+        // an error code do not guess the cause or expose English as German UI.
+        return lastError == nil ? nil : L10n.get("history_error_legacy")
+    }
+    func setHistoryError(_ error: Error) {
+        lastFailure = HistoryFailure(error)
+        lastError = nil
+    }
 
     init(source: URL, destination: URL, replacedBackup: URL?) {
         createdAt = Date()
