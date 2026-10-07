@@ -12,7 +12,7 @@
 
 ## Open Source Trust
 
-- Public repository is available: https://github.com/Niclas85/openComander
+- Public repository is available: https://github.com/Niclas85/OpenCommander
 - License file is present.
 - README explains build steps.
 - Issues are enabled.

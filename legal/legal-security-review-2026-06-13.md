@@ -22,7 +22,7 @@ OpenCommander is legally and technically plausible for publication as a free, op
 - Contact email is set to `info@opengames.vip`; real provider name and postal address still need to be filled in.
 - Publish privacy policy and imprint on a public URL.
 - Choose and confirm the open-source license. Current project default is MIT.
-- Source repository is public: https://github.com/Niclas85/openComander
+- Source repository is public: https://github.com/Niclas85/OpenCommander
 - Complete Google Play Data Safety based on the actual final build.
 - Complete Google Play All Files Access declaration.
 - Use `playstore/data-safety-de.md` and `playstore/all-files-access-de.md` as the prepared Play Console answers.
@@ -88,7 +88,7 @@ Do not publish until:
 
 - privacy policy URL is live
 - imprint/provider details are live
-- open-source repository is public: https://github.com/Niclas85/openComander
+- open-source repository is public: https://github.com/Niclas85/OpenCommander
 - release signing is configured
 - AAB release build is generated and tested
 - Play declarations are filled from this review

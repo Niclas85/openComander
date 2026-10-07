@@ -10,7 +10,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 
 SERIAL = "emulator-5554"
-EVIDENCE = Path("/Users/niklaus/Documents/openComander/parity-evidence/image-viewer")
+EVIDENCE = Path("/Users/niklaus/Documents/OpenCommander/parity-evidence/image-viewer")
 
 
 def wait(driver, by, value, timeout=15):

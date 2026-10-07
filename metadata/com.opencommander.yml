@@ -4,8 +4,8 @@ Categories:
 License: MIT
 AuthorName: OpenCommander contributors
 AuthorEmail: info@opengames.vip
-SourceCode: https://github.com/Niclas85/openComander
-IssueTracker: https://github.com/Niclas85/openComander/issues
+SourceCode: https://github.com/Niclas85/OpenCommander
+IssueTracker: https://github.com/Niclas85/OpenCommander/issues
 
 AutoName: OpenCommander
 Summary: Local dual-pane file manager without ads or tracking
@@ -28,7 +28,7 @@ Description: |-
   * Multilingual interface
 
 RepoType: git
-Repo: https://github.com/Niclas85/openComander.git
+Repo: https://github.com/Niclas85/OpenCommander.git
 
 Builds:
   - versionName: '1.0'
