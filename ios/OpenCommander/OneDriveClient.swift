@@ -13,6 +13,7 @@ struct OneDriveItem: Decodable {
     let eTag: String?
     var parentReference: ParentReference? = nil
     var root: [String: String]? = nil
+    var cTag: String? = nil
     var isFolder: Bool { folder != nil }
 }
 
@@ -26,7 +27,37 @@ struct OneDriveDeviceCode: Decodable {
 
 enum OneDriveFailure: LocalizedError {
     case message(String)
-    var errorDescription: String? { if case .message(let text) = self { return text }; return nil }
+    case nameConflict
+    var errorDescription: String? {
+        if case .message(let text) = self { return text }
+        let german = (UserDefaults.standard.string(forKey: "language") ?? Locale.current.language.languageCode?.identifier ?? "en").hasPrefix("de")
+        return german ? "Am OneDrive-Ziel ist bereits ein Element mit diesem Namen vorhanden. Die vorhandene Datei wurde nicht ersetzt. Aktualisiere den Ordner und wähle beim Kopieren ‚Beide behalten‘ oder ‚Überspringen‘. Bei Ordnern können bereits kopierte Teile vorhanden sein."
+            : "An item with this name already exists in OneDrive. The existing file was not replaced. Refresh the folder and choose Keep Both or Skip when copying. A folder transfer may already have copied some items."
+    }
+}
+
+enum OneDriveConflictNames {
+    static func key(_ name: String) -> String {
+        name.folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX")).precomposedStringWithCanonicalMapping
+    }
+    static func available(_ name: String, folder: Bool, existing: [String]) -> String {
+        let names = Set(existing.map(key))
+        guard names.contains(key(name)) else { return name }
+        let ext = folder ? "" : (name as NSString).pathExtension
+        let stem = ext.isEmpty ? name : (name as NSString).deletingPathExtension
+        var index = 2
+        while true {
+            let number = " (\(index))"
+            let suffix = number + (ext.isEmpty ? "" : "." + ext)
+            // An unusually long extension may itself occupy the entire name
+            // budget. In that case number the bounded whole name instead.
+            let candidate = suffix.count >= 255
+                ? String(name.prefix(255 - number.count)) + number
+                : String(stem.prefix(255 - suffix.count)) + suffix
+            if !names.contains(key(candidate)) { return candidate }
+            index += 1
+        }
+    }
 }
 
 protocol OneDriveTokenStore {
@@ -90,6 +121,7 @@ struct OneDriveKeychain: OneDriveTokenStore {
     let clientID: String
     private let session: URLSession
     private let store: OneDriveTokenStore
+    private let downloadFile: (URL) async throws -> (URL, URLResponse)
     private var accessToken: String?
     private var expiresAt = Date.distantPast
     private let authority = "https://login.microsoftonline.com/common/oauth2/v2.0/"
@@ -107,7 +139,8 @@ struct OneDriveKeychain: OneDriveTokenStore {
         enum CodingKeys: String, CodingKey { case value; case next = "@odata.nextLink" }
     }
 
-    init(clientID: String, session: URLSession? = nil, store: OneDriveTokenStore = OneDriveKeychain()) {
+    init(clientID: String, session: URLSession? = nil, store: OneDriveTokenStore = OneDriveKeychain(),
+         downloadFile: ((URL) async throws -> (URL, URLResponse))? = nil) {
         self.clientID = clientID; self.store = store
         if let session { self.session = session }
         else {
@@ -117,6 +150,8 @@ struct OneDriveKeychain: OneDriveTokenStore {
             configuration.timeoutIntervalForRequest = 60
             self.session = URLSession(configuration: configuration, delegate: OneDriveRedirectGuard(), delegateQueue: nil)
         }
+        let transport = self.session
+        self.downloadFile = downloadFile ?? { try await transport.download(from: $0) }
     }
     nonisolated static func allowedRedirect(from source: URL?, to destination: URL?) -> Bool {
         guard let source, let destination, destination.scheme == "https",
@@ -227,6 +262,7 @@ struct OneDriveKeychain: OneDriveTokenStore {
         guard let http = response as? HTTPURLResponse else { throw OneDriveFailure.message("Invalid OneDrive response.") }
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 401 { accessToken = nil; expiresAt = .distantPast }
+            if http.statusCode == 409 { throw OneDriveFailure.nameConflict }
             throw OneDriveFailure.message("OneDrive request failed (HTTP \(http.statusCode)). \(http.statusCode == 401 ? "Reconnect your account." : "No success was reported; refresh before retrying a change.")")
         }
         return data
@@ -266,11 +302,14 @@ struct OneDriveKeychain: OneDriveTokenStore {
         }
     }
     /// Resolve the real root ID: Graph does not accept "root" in parentReference.
-    func move(_ item: OneDriveItem, parent: String?) async throws {
+    func move(_ item: OneDriveItem, parent: String?, name: String? = nil) async throws {
+        if let name, !Self.validName(name) { throw OneDriveFailure.message("Invalid OneDrive name.") }
         let destination: String
         if let parent { destination = parent } else { destination = try await metadata().id }
         guard destination != item.id else { throw OneDriveFailure.message("A folder cannot be moved into itself.") }
-        let data = try JSONSerialization.data(withJSONObject: ["parentReference": ["id": destination], "@microsoft.graph.conflictBehavior": "fail"] as [String: Any])
+        var body: [String: Any] = ["parentReference": ["id": destination], "@microsoft.graph.conflictBehavior": "fail"]
+        if let name { body["name"] = name }
+        let data = try JSONSerialization.data(withJSONObject: body)
         _ = try await request(itemPath(item.id), method: "PATCH", body: data, matching: item.eTag)
     }
 
@@ -407,18 +446,36 @@ struct OneDriveKeychain: OneDriveTokenStore {
         // property. Request the default metadata so Graph includes it.
         let data = try await request(itemPath(item.id))
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        if let tag = item.eTag, object?["eTag"] as? String != tag { throw OneDriveFailure.message("The online file changed. Refresh and retry.") }
+        // The list/clipboard may predate upload processing or later edits. A
+        // read copies the current version, not the stale selection's eTag.
+        let current = try JSONDecoder().decode(OneDriveItem.self, from: data)
+        guard current.id == item.id, !current.isFolder, current.name == item.name,
+              let version = current.cTag ?? current.eTag else {
+            throw OneDriveFailure.message("OneDrive could not confirm the current file name/version. Refresh the folder and retry. Source retained.")
+        }
         guard let address = object?["@microsoft.graph.downloadUrl"] as? String,
               let url = URL(string: address), url.scheme == "https", url.user == nil, url.password == nil else {
             throw OneDriveFailure.message("OneDrive did not provide a secure download address.")
         }
-        let (temporary, response) = try await session.download(from: url)
+        let (temporary, response) = try await downloadFile(url)
         defer { try? FileManager.default.removeItem(at: temporary) }
         guard let http = response as? HTTPURLResponse, http.statusCode == 200, http.url?.scheme == "https" else {
             throw OneDriveFailure.message("OneDrive download failed.")
         }
         if let size = object?["size"] as? NSNumber {
             guard try temporary.resourceValues(forKeys: [.fileSizeKey]).fileSize == size.intValue else { throw OneDriveFailure.message("Incomplete download. Source retained.") }
+        }
+        // cTag identifies content only; eTag also changes for metadata. Pin the
+        // freshly fetched content version across the actual download. Moves
+        // still independently use their full eTag snapshot before deletion.
+        let after = try await metadata(item.id)
+        let afterVersion = current.cTag != nil ? after.cTag : after.eTag
+        guard after.id == current.id, !after.isFolder, after.name == current.name,
+              after.size == current.size, afterVersion == version else {
+            let german = (UserDefaults.standard.string(forKey: "language") ?? Locale.current.language.languageCode?.identifier ?? "en").hasPrefix("de")
+            throw OneDriveFailure.message(german
+                ? "Die OneDrive-Datei wurde während des Downloads verändert. Bitte erneut kopieren. Die Quelle bleibt erhalten."
+                : "The OneDrive file changed during download. Copy it again. The source has been retained.")
         }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("OpenCommander-OneDrive-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

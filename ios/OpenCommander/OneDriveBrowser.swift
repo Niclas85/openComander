@@ -61,9 +61,37 @@ private final class OneDriveCell: UITableViewCell {
     private var previewURLs: [URL] = []
     private enum OnlineUndo {
         case rename(OneDriveItem, String)
-        case move(OneDriveItem, String?)
+        case move(OneDriveItem, String?, String)
     }
     private var undoHistory: [OnlineUndo] = []
+    private enum ConflictChoice { case keepBoth, skip, cancel }
+    private var conflictPrompt: (UIAlertController, CheckedContinuation<ConflictChoice, Never>)?
+    private func finishConflict(_ choice: ConflictChoice) {
+        guard let (alert, continuation) = conflictPrompt else { return }
+        conflictPrompt = nil
+        alert.dismiss(animated: false) { continuation.resume(returning: choice) }
+    }
+    private func destinationName(_ name: String, folder: Bool, parent: String?, excluding: String? = nil) async throws -> String? {
+        guard let client else { throw CancellationError() }
+        let names = try await client.children(of: parent).filter { $0.id != excluding }.map(\.name)
+        let alternative = OneDriveConflictNames.available(name, folder: folder, existing: names)
+        guard alternative != name else { return name }
+        let choice: ConflictChoice = await withTaskCancellationHandler(operation: {
+            await withCheckedContinuation { continuation in
+                guard !Task.isCancelled, self.view.window != nil else { continuation.resume(returning: .cancel); return }
+                let alert = UIAlertController(title: self.text("Name bereits vorhanden", "Name already exists"),
+                    message: self.text("‚\(name)‘ ist im Zielordner bereits vorhanden. Beide behalten erstellt ‚\(alternative)‘. Vorhandene Dateien bleiben unverändert; Ordner werden nicht zusammengeführt.",
+                        "‘\(name)’ already exists in the destination. Keep Both creates ‘\(alternative)’. Existing files remain unchanged; folders are not merged."), preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: self.text("Beide behalten", "Keep Both"), style: .default) { [weak self] _ in self?.finishConflict(.keepBoth) })
+                alert.addAction(UIAlertAction(title: self.text("Überspringen", "Skip"), style: .default) { [weak self] _ in self?.finishConflict(.skip) })
+                alert.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel) { [weak self] _ in self?.finishConflict(.cancel) })
+                self.conflictPrompt = (alert, continuation)
+                self.present(alert, animated: true)
+            }
+        }, onCancel: { [weak self] in Task { @MainActor in self?.finishConflict(.cancel) } })
+        try Task.checkCancellation()
+        switch choice { case .keepBoth: return alternative; case .skip: return nil; case .cancel: throw CancellationError() }
+    }
     func undoOnlineOperation() {
         guard let record = undoHistory.last, !busy else {
             commander?.updateGlobalStatus(L10n.get("undo_empty")); return
@@ -75,12 +103,12 @@ private final class OneDriveCell: UITableViewCell {
                 guard item.eTag != nil else { throw OneDriveFailure.message("Cannot safely undo without a OneDrive version.") }
                 try await client.rename(item, to: name)
                 self.record(L10n.get("undo"), source: self.onlineLocation(item.name), destination: self.onlineLocation(name))
-            case .move(let item, let parent):
+            case .move(let item, let parent, let oldName):
                 guard item.eTag != nil else { throw OneDriveFailure.message("Cannot safely undo without a OneDrive version.") }
                 let current = try await client.metadata(item.id)
                 let source = try await self.destinationLocation(current.parentReference?.id, name: item.name)
-                let destination = try await self.destinationLocation(parent, name: item.name)
-                try await client.move(item, parent: parent)
+                let destination = try await self.destinationLocation(parent, name: oldName)
+                try await client.move(item, parent: parent, name: oldName)
                 self.record(L10n.get("undo"), source: source, destination: destination)
             }
             self.undoHistory.removeLast()
@@ -784,14 +812,16 @@ extension OneDriveBrowser: UITableViewDragDelegate, UITableViewDropDelegate {
             guard let self, let client = self.client else { return }
             for url in urls {
                 try Task.checkCancellation()
-                let targetLocation = try await self.destinationLocation(destination, name: url.lastPathComponent)
                 let accessed = url.startAccessingSecurityScopedResource()
                 defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                let folder = try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+                guard let name = try await self.destinationName(url.lastPathComponent, folder: folder, parent: destination) else { continue }
+                let targetLocation = try await self.destinationLocation(destination, name: name)
                 let before = try await Task.detached { try OneDriveClient.localSnapshot(url) }.value
                 let container = FileManager.default.temporaryDirectory.appendingPathComponent("OpenCommander-OneDrive-" + UUID().uuidString, isDirectory: true)
                 try FileManager.default.createDirectory(at: container, withIntermediateDirectories: false)
                 defer { try? FileManager.default.removeItem(at: container) }
-                let staged = container.appendingPathComponent(url.lastPathComponent)
+                let staged = container.appendingPathComponent(name)
                 try await Task.detached { try FileManager.default.copyItem(at: url, to: staged) }.value
                 let preparedSnapshot = try await Task.detached { try OneDriveClient.localSnapshot(url) }.value
                 guard preparedSnapshot == before else { throw OneDriveFailure.message("Source changed while preparing transfer. Source retained.") }
@@ -819,18 +849,22 @@ extension OneDriveBrowser: UITableViewDragDelegate, UITableViewDropDelegate {
             for item in selection.items {
                 try Task.checkCancellation()
                 let sourceLocation = try await source.destinationLocation(selection.parentID, name: item.name)
-                let targetLocation = try await self.destinationLocation(destination, name: item.name)
                 // Validate ancestors with metadata, including collapsed/unloaded
                 // tree targets. Never copy a folder into itself or descendants.
                 try await targetClient.validateDestination(destination, excluding: item.id)
+                guard let name = try await self.destinationName(item.name, folder: item.isFolder, parent: destination, excluding: move ? item.id : nil) else { continue }
+                let targetLocation = try await self.destinationLocation(destination, name: name)
                 if move {
-                    try await sourceClient.move(item, parent: destination)
+                    // Name and parent change atomically; never rename the source first.
+                    try await sourceClient.move(item, parent: destination, name: name)
                     self.record(L10n.get("move"), source: sourceLocation, destination: targetLocation)
-                    self.undoHistory.append(.move(try await sourceClient.metadata(item.id), selection.parentID))
+                    self.undoHistory.append(.move(try await sourceClient.metadata(item.id), selection.parentID, item.name))
                 } else {
                     let url = try await sourceClient.downloadTree(item)
                     defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-                    try await targetClient.uploadTree(url, parent: destination)
+                    let staged = url.deletingLastPathComponent().appendingPathComponent(name)
+                    if staged != url { try FileManager.default.moveItem(at: url, to: staged) }
+                    try await targetClient.uploadTree(staged, parent: destination)
                     self.record(L10n.get("copy"), source: sourceLocation, destination: targetLocation)
                 }
             }

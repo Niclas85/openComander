@@ -80,6 +80,14 @@ Never ship a client secret in this desktop application.
 - ZIP creation and safe extraction use the regular toolbar and publish their outputs
   into the current online folder. Extraction checks paths, expanded-size limits and CRCs
   before uploading; existing names get a numbered new destination.
+- Copy/upload and internal moves check destination names first. A collision offers
+  Keep Both (a numbered name), Skip, or Cancel, including folders, case variants and
+  canonically equivalent Unicode names. Existing items are never silently replaced
+  or merged. Move-with-new-name is a single conditional Graph update, and session
+  undo restores both the original name and parent. Replacement is not offered yet.
+  A concurrent conflict after the check remains safely refused and reports a readable
+  error rather than the raw HTTP 409 message. Interrupted folder uploads may leave
+  already-created destination items; refresh before retrying.
 - Rename and internal OneDrive moves can be undone in the current session. Undo is
   conditional on the version recorded after the operation; concurrent changes fail
   rather than being silently overwritten. Deleted items remain recoverable through
@@ -96,6 +104,13 @@ Never ship a client secret in this desktop application.
   indeterminate progress indicator: no fabricated percentage when Graph does not
   provide byte progress. Google Drive/iCloud background synchronization outside
   OpenCommander remains owned by the provider app, not this indicator.
+- Downloads pin fresh metadata at transfer start instead of comparing against a
+  stale list/clipboard eTag. Content version (`cTag`, falling back to fresh `eTag`)
+  and size/name are checked again after download, before publishing the local
+  result. Metadata-only changes no longer reject unchanged content when cTag is
+  available. Source-removal checks for moves still use the full eTag manifest and
+  conditional deletion. The mock suite covers stale selections, metadata-only
+  updates, actual concurrent edits, missing post-download cTag and staging cleanup.
 - This does not enable or repair a disabled macOS File Provider domain. Local cloud
   locations continue to use the existing provider integration.
 
@@ -134,6 +149,26 @@ creation, extraction to a numbered conflict-free folder, and rename/toolbar undo
 verified live with only generated fixtures. Internal move/toolbar undo was then
 verified with the moved file removed from the temporary destination. Existing user
 cloud content was untouched.
+On 2026-10-07 the fresh-file download correction was also verified live: generated
+`Weiterkopieren-20261007.txt` (113 bytes) was uploaded to the isolated test folder,
+copied immediately into its online `Quelle` subfolder, then copied back into a new
+local temporary directory. The source and round-tripped file had identical SHA-256
+`b73172cda3dc748036725d90cdcab5e19dfc7cc5f35a25cc3323e6896a4de8e1`.
+No stale-version error occurred. The OneDrive mock suite passes 14 groups and the
+local safety/history suite passes 9 groups. Move-source deletion protection remains
+unchanged. Only generated test files were used. Both new online test files were
+recycled afterward and remain recoverable in OneDrive's bin; existing fixtures
+and personal content were untouched. Local temporary fixtures remain for inspection.
+
+On 2026-10-07 the conflict UI was verified live by copying the generated Unicode
+test file into the same test folder where its name already existed. Keep Both
+created `Grüsse (2).txt` alongside the original. Repeating with Skip and Cancel
+created no further copy. The new numbered test copy was then recycled (recoverable
+in OneDrive's bin); the original and other fixtures remained. The OneDrive mock
+suite now passes 13 groups, including Unicode/case conflict naming, name limits,
+atomic move/rename requests and typed 409 failure handling. Conditional replacement
+and folder merging remain unimplemented; the UI intentionally does not offer them.
+
 The cloud-history/progress build was verified live on 2026-10-05: the generated
 Unicode test file was moved from the test folder into `Quelle`, appeared there,
 and was restored using online Undo. The normal History panel displayed the move

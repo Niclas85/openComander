@@ -107,6 +107,17 @@ final class MockMicrosoft: URLProtocol {
         check(requests.count == before, "Invalid names cause no requests")
         print("PASS create/rename/recycle requests and invalid name protection")
 
+        check(OneDriveConflictNames.available("Photo.JPG", folder: false, existing: ["photo.jpg", "PHOTO (2).jpg"]) == "Photo (3).JPG", "Keep both is case insensitive and preserves extension")
+        check(OneDriveConflictNames.available("Grüsse.txt", folder: false, existing: ["Gru\u{0308}sse.txt"]) == "Grüsse (2).txt", "Canonically equivalent Unicode names conflict")
+        check(OneDriveConflictNames.available("Folder.v1", folder: true, existing: ["Folder.v1"]) == "Folder.v1 (2)", "Folder dots are not extensions")
+        check(OneDriveConflictNames.available(".env", folder: false, existing: [".env"]) == ".env (2)", "Extensionless dotfiles retain their name")
+        check(OneDriveConflictNames.available("new.txt", folder: false, existing: []) == "new.txt", "No conflict keeps original name")
+        let longName = String(repeating: "x", count: 251) + ".txt"
+        check(OneDriveClient.validName(OneDriveConflictNames.available(longName, folder: false, existing: [longName])), "Numbered name stays within name limit")
+        let longExtension = "x." + String(repeating: "e", count: 253)
+        check(OneDriveClient.validName(OneDriveConflictNames.available(longExtension, folder: false, existing: [longExtension])), "Extreme extension cannot exceed numbered name limit")
+        print("PASS safe conflict names, case/Unicode equivalence, folders, extensions and length limit")
+
         let fixture = FileManager.default.temporaryDirectory.appendingPathComponent("OpenCommander-OneDriveTests-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: fixture, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: fixture) }
@@ -169,6 +180,21 @@ final class MockMicrosoft: URLProtocol {
         }
         try await api.move(file, parent: nil)
         check(requests.map(\.httpMethod) == ["GET", "PATCH"], "Root lookup then server-side move")
+        requests = []
+        MockMicrosoft.handler = { request in
+            requests.append(request)
+            let object = try JSONSerialization.jsonObject(with: body(request)) as! [String: Any]
+            check(object["name"] as? String == "Grüsse (2).txt", "Keep Both name sent atomically with move")
+            check((object["parentReference"] as? [String: String])?["id"] == "target", "Move and rename share one request")
+            check(request.value(forHTTPHeaderField: "If-Match") == file.eTag, "Conflict-safe move retains version condition")
+            return (200, "{}")
+        }
+        try await api.move(file, parent: "target", name: "Grüsse (2).txt")
+        check(requests.count == 1, "No source rename before successful move")
+        MockMicrosoft.handler = { _ in (409, #"{"error":{"code":"nameAlreadyExists"}}"#) }
+        do { try await api.move(file, parent: "target"); fatalError("Name collision falsely succeeded") }
+        catch OneDriveFailure.nameConflict { }
+        print("PASS atomic conflict-name moves and typed 409 failures")
         let folder = try JSONDecoder().decode(OneDriveItem.self, from: Data(#"{"id":"folder","name":"Folder","folder":{},"eTag":"v1"}"#.utf8))
         MockMicrosoft.handler = { request in
             if request.url!.path.hasSuffix("child") { return (200, #"{"id":"child","parentReference":{"id":"folder"}}"#) }
@@ -216,9 +242,52 @@ final class MockMicrosoft: URLProtocol {
         do { try await api.recycleUnchanged(folder, snapshot: folderManifest); fatalError("Folder source removed without an atomic descendant guard") } catch { }
         print("PASS folder upload, source-change protection, conditional deletion failure")
 
+        @MainActor func checkDownload(before: String, after: String, contentBefore: String?, contentAfter: String?, succeeds: Bool) async throws {
+            var reads = 0
+            var temporary: URL?
+            MockMicrosoft.handler = { request in
+                if request.url!.host == "login.microsoftonline.com" {
+                    return (200, #"{"access_token":"fixture-access","refresh_token":"fixture-refresh","expires_in":3600}"#)
+                }
+                check(request.httpMethod == "GET", "Copy download never mutates its source")
+                reads += 1
+                var metadata: [String: Any] = ["id": "versioned", "name": "test.txt", "size": 3,
+                    "eTag": reads == 1 ? before : after,
+                    "@microsoft.graph.downloadUrl": "https://download.example/test"]
+                if let tag = reads == 1 ? contentBefore : contentAfter { metadata["cTag"] = tag }
+                return (200, String(data: try JSONSerialization.data(withJSONObject: metadata), encoding: .utf8)!)
+            }
+            let reader = OneDriveClient(clientID: id, session: session, store: MemoryTokens(), downloadFile: { url in
+                check(url.host == "download.example", "Only metadata-provided download URL used")
+                let staged = fixture.appendingPathComponent("download-" + UUID().uuidString)
+                temporary = staged
+                try Data("abc".utf8).write(to: staged)
+                return (staged, HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!)
+            })
+            do {
+                // `versioned` was selected with an older v1 eTag. Reads must
+                // fetch a fresh version rather than rejecting that stale list.
+                let downloaded = try await reader.download(versioned)
+                check(succeeds, "Changed content must not be published")
+                let content = try String(contentsOf: downloaded, encoding: .utf8)
+                check(content == "abc", "Complete current content copied")
+                try FileManager.default.removeItem(at: downloaded.deletingLastPathComponent())
+            } catch { if succeeds { throw error } }
+            check(reads == 2, "Current version checked before and after download")
+            if let temporary { check(!FileManager.default.fileExists(atPath: temporary.path), "Downloaded staging cleaned on success/failure") }
+        }
+        try await checkDownload(before: "fresh-v2", after: "fresh-v2", contentBefore: nil, contentAfter: nil, succeeds: true)
+        try await checkDownload(before: "fresh-v2", after: "metadata-v3", contentBefore: "content-v2", contentAfter: "content-v2", succeeds: true)
+        try await checkDownload(before: "fresh-v2", after: "edited-v3", contentBefore: "content-v2", contentAfter: "content-v3", succeeds: false)
+        try await checkDownload(before: "fresh-v2", after: "edited-v3", contentBefore: nil, contentAfter: nil, succeeds: false)
+        try await checkDownload(before: "fresh-v2", after: "metadata-v3", contentBefore: "content-v2", contentAfter: nil, succeeds: false)
+        print("PASS fresh download snapshots, stale-list recovery, metadata-only changes and concurrent-content protection")
+
         MockMicrosoft.handler = { request in
             check(request.url!.query == nil, "Default metadata requested for download annotation")
-            return (200, #"{"@microsoft.graph.downloadUrl":"http://unsafe.example/fixture"}"#)
+            let metadata: [String: Any] = ["id": file.id, "name": file.name, "eTag": "fresh", "size": 3,
+                "@microsoft.graph.downloadUrl": "http://unsafe.example/fixture"]
+            return (200, String(data: try JSONSerialization.data(withJSONObject: metadata), encoding: .utf8)!)
         }
         do { _ = try await api.download(file); fatalError("HTTP download URL accepted") } catch { }
         try api.disconnect(); check(store.value == nil, "Disconnect removes credential")
