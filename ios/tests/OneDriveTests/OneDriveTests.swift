@@ -23,6 +23,18 @@ final class MockMicrosoft: URLProtocol {
 }
 
 @main struct OneDriveTests {
+    static func body(_ request: URLRequest) -> Data {
+        if let data = request.httpBody { return data }
+        guard let stream = request.httpBodyStream else { return Data() }
+        stream.open(); defer { stream.close() }
+        var result = Data(), buffer = [UInt8](repeating: 0, count: 65_536)
+        while true {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count <= 0 { break }
+            result.append(contentsOf: buffer.prefix(count))
+        }
+        return result
+    }
     static func check(_ condition: @autoclosure () -> Bool, _ label: String) {
         if !condition() { fatalError("FAIL: " + label) }
     }
@@ -73,7 +85,7 @@ final class MockMicrosoft: URLProtocol {
         do { _ = try await api.children(); fatalError("Repeated page accepted") } catch { }
         print("PASS pagination loop detection")
 
-        let file = try JSONDecoder().decode(OneDriveItem.self, from: Data(#"{"id":"fixture-id","name":"fixture.txt","size":7}"#.utf8))
+        let file = try JSONDecoder().decode(OneDriveItem.self, from: Data(#"{"id":"fixture-id","name":"fixture.txt","size":7,"eTag":"fixture-v1"}"#.utf8))
         requests = []
         MockMicrosoft.handler = { request in
             requests.append(request)
@@ -85,6 +97,9 @@ final class MockMicrosoft: URLProtocol {
         try await api.rename(file, to: "Renamed.txt")
         try await api.recycle(file)
         check(requests.map(\.httpMethod) == ["POST", "PATCH", "DELETE"], "Correct mutation methods")
+        check(requests[1].value(forHTTPHeaderField: "If-Match") == "fixture-v1", "Rename and undo protect against concurrent changes")
+        let renameBody = try JSONSerialization.jsonObject(with: body(requests[1])) as! [String: Any]
+        check(renameBody["@microsoft.graph.conflictBehavior"] as? String == "fail", "Rename never replaces a destination")
         let before = requests.count
         for invalid in ["../escape", "bad\\name", "bad:name", "trailing.", "", "..", "\n"] {
             do { try await api.createFolder(invalid, parent: nil); fatalError("Invalid name accepted") } catch { }
@@ -106,11 +121,105 @@ final class MockMicrosoft: URLProtocol {
         let handle = try FileHandle(forWritingTo: large)
         try handle.truncate(atOffset: 20 * 1024 * 1024 + 1); try handle.close()
         let count = requests.count
-        do { try await api.upload(large, parent: nil); fatalError("Oversize upload accepted") } catch { }
-        check(count == requests.count, "Oversize file blocked before upload")
-        print("PASS failed upload propagates, collision refusal, encoding, size guard")
+        do { try await api.upload(large, parent: nil); fatalError("Failed session accepted") } catch { }
+        check(count + 1 == requests.count && requests.last?.url?.path.hasSuffix("createUploadSession") == true, "Large upload uses a session")
+        print("PASS failed upload propagates, collision refusal, encoding, upload-session failure")
 
-        MockMicrosoft.handler = { _ in (200, #"{"@microsoft.graph.downloadUrl":"http://unsafe.example/fixture"}"#) }
+        var offset = 0
+        let total = 20 * 1024 * 1024 + 1
+        MockMicrosoft.handler = { request in
+            if request.url!.host == "graph.microsoft.com" {
+                check(request.httpMethod == "POST", "Session creation uses POST")
+                check(request.value(forHTTPHeaderField: "Authorization") == "Bearer fixture-access", "Only session creation receives Graph token")
+                return (200, #"{"uploadUrl":"https://upload.example/fixture"}"#)
+            }
+            check(request.value(forHTTPHeaderField: "Authorization") == nil, "Upload chunks never contain a Graph bearer")
+            let bytes = body(request).count
+            check(request.value(forHTTPHeaderField: "Content-Range") == "bytes \(offset)-\(offset + bytes - 1)/\(total)", "Contiguous byte ranges")
+            offset += bytes
+            if offset == total { return (201, "{\"id\":\"large\",\"name\":\"large.bin\",\"size\":\(total)}") }
+            check(bytes % 327_680 == 0, "Intermediate chunk multiple of 320 KiB")
+            return (202, "{\"nextExpectedRanges\":[\"\(offset)-\"]}")
+        }
+        try await api.upload(large, parent: nil)
+        check(offset == total, "All large-file bytes sent")
+        MockMicrosoft.handler = { request in
+            if request.url!.host == "graph.microsoft.com" { return (200, #"{"uploadUrl":"https://upload.example/fixture"}"#) }
+            return (202, #"{"nextExpectedRanges":["0-"]}"#)
+        }
+        do { try await api.upload(large, parent: nil); fatalError("Unexpected chunk offset accepted") } catch { }
+        check(FileManager.default.fileExists(atPath: large.path), "Failed chunk upload retains the source")
+        let beforeSnapshot = try OneDriveClient.localSnapshot(local)
+        try Data("changed".utf8).write(to: local)
+        let afterSnapshot = try OneDriveClient.localSnapshot(local)
+        check(afterSnapshot != beforeSnapshot, "Same-size edits change source fingerprint")
+        let link = fixture.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: local)
+        do { _ = try OneDriveClient.localSnapshot(link); fatalError("Link followed") } catch { }
+        print("PASS large-file streaming, byte ranges, credential separation, fingerprints, links")
+
+        requests = []
+        MockMicrosoft.handler = { request in
+            requests.append(request)
+            if request.httpMethod == "GET" { return (200, #"{"id":"actual-root","name":"root","folder":{}}"#) }
+            let object = try JSONSerialization.jsonObject(with: body(request)) as! [String: Any]
+            check((object["parentReference"] as? [String: String])?["id"] == "actual-root", "Move to root uses actual ID")
+            check(object["@microsoft.graph.conflictBehavior"] as? String == "fail", "Move refuses name conflicts")
+            return (200, "{}")
+        }
+        try await api.move(file, parent: nil)
+        check(requests.map(\.httpMethod) == ["GET", "PATCH"], "Root lookup then server-side move")
+        let folder = try JSONDecoder().decode(OneDriveItem.self, from: Data(#"{"id":"folder","name":"Folder","folder":{},"eTag":"v1"}"#.utf8))
+        MockMicrosoft.handler = { request in
+            if request.url!.path.hasSuffix("child") { return (200, #"{"id":"child","parentReference":{"id":"folder"}}"#) }
+            fatalError("Descendant check must stop before traversing the source")
+        }
+        do { try await api.validateDestination("child", excluding: "folder"); fatalError("Descendant destination accepted") } catch { }
+        print("PASS server-side move, real root ID, collisions, descendant protection")
+
+        let nested = fixture.appendingPathComponent("Nested", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: false)
+        try Data("abc".utf8).write(to: nested.appendingPathComponent("child.txt"))
+        requests = []
+        MockMicrosoft.handler = { request in
+            requests.append(request)
+            if request.httpMethod == "POST" { return (201, #"{"id":"new-folder","name":"Nested","folder":{}}"#) }
+            check(request.url!.path.contains("new-folder:/child.txt:/content"), "Child uploaded into created directory")
+            return (201, #"{"id":"new-child","name":"child.txt","size":3}"#)
+        }
+        try await api.uploadTree(nested, parent: nil)
+        check(requests.map(\.httpMethod) == ["POST", "PUT"], "Folder and child upload")
+        var version = "v1"
+        var deletes = 0
+        let versioned = try JSONDecoder().decode(OneDriveItem.self, from: Data(#"{"id":"versioned","name":"test.txt","size":3,"eTag":"v1"}"#.utf8))
+        MockMicrosoft.handler = { request in
+            if request.httpMethod == "DELETE" {
+                deletes += 1
+                check(request.value(forHTTPHeaderField: "If-Match") == "v1", "Move deletion is conditional on source version")
+                return (412, "{}")
+            }
+            return (200, "{\"id\":\"versioned\",\"name\":\"test.txt\",\"size\":3,\"eTag\":\"\(version)\"}")
+        }
+        let manifest = try await api.remoteSnapshot(versioned)
+        version = "v2"
+        do { try await api.recycleUnchanged(versioned, snapshot: manifest); fatalError("Changed source removed") } catch { }
+        check(deletes == 0, "Changed remote source never deleted")
+        version = "v1"
+        do { try await api.recycleUnchanged(versioned, snapshot: manifest); fatalError("Failed conditional removal accepted") } catch { }
+        check(deletes == 1, "Conditional failure propagates")
+        MockMicrosoft.handler = { request in
+            if request.url!.path.hasSuffix("children") { return (200, #"{"value":[]}"#) }
+            check(request.httpMethod != "DELETE", "Folder must never be recursively deleted by a cross-storage move")
+            return (200, #"{"id":"folder","name":"Folder","folder":{},"eTag":"v1"}"#)
+        }
+        let folderManifest = try await api.remoteSnapshot(folder)
+        do { try await api.recycleUnchanged(folder, snapshot: folderManifest); fatalError("Folder source removed without an atomic descendant guard") } catch { }
+        print("PASS folder upload, source-change protection, conditional deletion failure")
+
+        MockMicrosoft.handler = { request in
+            check(request.url!.query == nil, "Default metadata requested for download annotation")
+            return (200, #"{"@microsoft.graph.downloadUrl":"http://unsafe.example/fixture"}"#)
+        }
         do { _ = try await api.download(file); fatalError("HTTP download URL accepted") } catch { }
         try api.disconnect(); check(store.value == nil, "Disconnect removes credential")
         let disconnectedCount = requests.count

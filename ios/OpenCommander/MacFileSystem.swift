@@ -6,9 +6,11 @@ struct DesktopLocationPreference: Codable {
     var enabled: Bool
     var custom: Bool
     var bookmark: Data?
+    var visibilityConfigured: Bool?
 }
 
 enum DesktopLocationPreferences {
+    static let oneDriveOnlinePath = "onedrive://online"
     static func load(from defaults: UserDefaults = .standard) -> [DesktopLocationPreference] {
         guard let data = defaults.data(forKey: "desktop_locations_v1") else { return [] }
         return (try? JSONDecoder().decode([DesktopLocationPreference].self, from: data)) ?? []
@@ -51,6 +53,21 @@ enum HostFileSystem {
         let url: URL
         let kind: StorageKind
         var isLocalArchive: Bool = false
+        var isDisabled: Bool = false
+        var visibleByDefault: Bool { !isLocalArchive && !isDisabled }
+        var previousDefaultNames: [String] {
+            let component = url.lastPathComponent
+            if component.hasPrefix("OneDrive-FreigegebeneBibliotheken") {
+                return ["OneDrive — " + String(component.dropFirst("OneDrive-".count))]
+            }
+            return []
+        }
+
+        var displayName: String {
+            if isLocalArchive { return "\(name) — \(L10n.get("cloud_local_archive"))" }
+            if isDisabled { return "\(name) — \(L10n.get("location_disabled"))" }
+            return name
+        }
     }
 
     enum FullDiskAccessStatus: Equatable {
@@ -158,8 +175,18 @@ enum HostFileSystem {
         func append(_ url: URL, name: String) {
             let resolved = url.resolvingSymlinksInPath().standardizedFileURL
             guard isDirectory(resolved), addedPaths.insert(resolved.path).inserted else { return }
-            let archived = fm.fileExists(atPath: resolved.appendingPathComponent(".drive_fs_ignore_preserved_domain").path)
-            result.append(StorageLocation(name: name, url: resolved, kind: .cloudStorage, isLocalArchive: archived))
+            let datedGoogleCopy = resolved.lastPathComponent.hasPrefix("GoogleDrive-") &&
+                resolved.lastPathComponent.range(of: #" \(\d{2}\.\d{2}\.\d{2} \d{2}:\d{2}\)$"#, options: .regularExpression) != nil
+            let archived = datedGoogleCopy || fm.fileExists(atPath: resolved.appendingPathComponent(".drive_fs_ignore_preserved_domain").path)
+            var disabled = false
+            // Only inspect the top-level names; never hydrate files or recurse.
+            // Permission/transient errors do not mean a provider is disabled.
+            if !archived {
+                do { _ = try coordinatedRead(at: resolved) { try fm.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil) } }
+                catch { disabled = isDisabledProvider(error as NSError) }
+            }
+            result.append(StorageLocation(name: name, url: resolved, kind: .cloudStorage,
+                isLocalArchive: archived, isDisabled: disabled))
         }
 
         let cloudRoot = home.appendingPathComponent("Library/CloudStorage", isDirectory: true)
@@ -274,7 +301,11 @@ enum HostFileSystem {
             ("Box-", "Box — ")
         ]
         for (prefix, replacement) in knownPrefixes where directoryName.hasPrefix(prefix) {
-            return replacement + String(directoryName.dropFirst(prefix.count))
+            let account = String(directoryName.dropFirst(prefix.count))
+            if prefix == "OneDrive-", account.hasPrefix("FreigegebeneBibliotheken") {
+                return L10n.get("onedrive_shared_local")
+            }
+            return replacement + account
         }
         return directoryName
     }

@@ -14,7 +14,7 @@ class TreeNode {
     }
 }
 
-class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITextFieldDelegate {
+class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITextFieldDelegate, UIGestureRecognizerDelegate {
     let title: String
     let accent: String
     weak var viewController: ViewController?
@@ -42,6 +42,38 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
     private var expandedTreeKeys = Set<String>()
     private var treeGeneration = 0
 #if targetEnvironment(macCatalyst)
+    var onlineNavigation: UINavigationController?
+    private weak var paneShell: UIStackView?
+    var onlineBrowser: OneDriveBrowser? { onlineNavigation?.viewControllers.first as? OneDriveBrowser }
+
+    func showOnline(_ navigation: UINavigationController) {
+        onlineNavigation = navigation
+        selectedKeys.removeAll()
+        mountOnlineView()
+    }
+    private func mountOnlineView() {
+        guard let shell = paneShell, let navigation = onlineNavigation else { return }
+        shell.arrangedSubviews.forEach { $0.isHidden = true }
+        let content = navigation.view!
+        content.removeFromSuperview()
+        content.translatesAutoresizingMaskIntoConstraints = false
+        shell.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: shell.leadingAnchor, constant: 4),
+            content.trailingAnchor.constraint(equalTo: shell.trailingAnchor, constant: -4),
+            content.topAnchor.constraint(equalTo: shell.topAnchor, constant: 4),
+            content.bottomAnchor.constraint(equalTo: shell.bottomAnchor, constant: -4)
+        ])
+    }
+    func closeOnline() {
+        guard let navigation = onlineNavigation else { return }
+        onlineBrowser?.cancelPendingWork()
+        navigation.willMove(toParent: nil)
+        navigation.view.removeFromSuperview()
+        navigation.removeFromParent()
+        onlineNavigation = nil
+        paneShell?.arrangedSubviews.forEach { $0.isHidden = false }
+    }
     private var cloudObserver: CloudDirectoryObserver?
     private var cloudRefreshWork: DispatchWorkItem?
 #endif
@@ -57,6 +89,7 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
     var fileList: UITableView!
     var pathText: UITextField!
     var selectionText: UILabel!
+    private let loadingIndicator = UIActivityIndicatorView(style: .medium)
     
     var currentDirectoryBytes: Int64 = -1
     
@@ -76,6 +109,9 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
     }
     
     func setRoot(_ root: FileEntry, recordHistory: Bool = true) {
+#if targetEnvironment(macCatalyst)
+        closeOnline()
+#endif
         if recordHistory, let current = currentDirectory, current.key() != root.key() {
             backHistory.append(current)
             forwardHistory.removeAll()
@@ -101,7 +137,15 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         guard let vc = viewController, let theme = vc.theme else { return UIView() }
         
         let shell = UIStackView()
+#if targetEnvironment(macCatalyst)
+        paneShell = shell
+#endif
         shell.accessibilityIdentifier = "Pane-\(title)"
+        let activate = UITapGestureRecognizer(target: self, action: #selector(activatePane))
+        activate.cancelsTouchesInView = false
+        activate.delaysTouchesEnded = false
+        activate.delegate = self
+        shell.addGestureRecognizer(activate)
         shell.axis = .vertical
         shell.spacing = dp(8)
         shell.layer.borderWidth = 1
@@ -173,6 +217,10 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
 #endif
         pathRow.addArrangedSubview(pathText)
         pathRow.addArrangedSubview(selectionText)
+        loadingIndicator.accessibilityIdentifier = "DirectoryLoading-\(title)"
+        loadingIndicator.accessibilityLabel = L10n.get("directory_loading")
+        pathRow.addArrangedSubview(loadingIndicator)
+        if listingPending { loadingIndicator.startAnimating() }
         
         pathText.translatesAutoresizingMaskIntoConstraints = false
         selectionText.translatesAutoresizingMaskIntoConstraints = false
@@ -290,6 +338,9 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         refreshFiles()
         rebuildTree()
         
+#if targetEnvironment(macCatalyst)
+        mountOnlineView()
+#endif
         return shell
     }
 
@@ -401,6 +452,7 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
         }
         listedDirectoryKey = directory.key()
         listingPending = true
+        loadingIndicator.startAnimating()
         currentDirectoryBytes = -1
         showDirectoryMessage(visibleEntries.isEmpty ? L10n.get("directory_loading") : nil, retry: false)
         updateSelectionStatus()
@@ -451,6 +503,7 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
 
     private func finishListing(_ result: Result<[FileEntry], Error>) {
         listingPending = false
+        loadingIndicator.stopAnimating()
         switch result {
         case .success(let entries):
             allEntries = entries
@@ -628,11 +681,21 @@ class CommanderPane: NSObject, UITableViewDataSource, UITableViewDelegate, UITex
     }
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        activatePane()
         let requestedPath = textField.text ?? ""
         textField.resignFirstResponder()
         openTypedPath(requestedPath)
         return true
     }
+
+    func textFieldDidBeginEditing(_ textField: UITextField) { activatePane() }
+
+    @objc private func activatePane() {
+        viewController?.activePane = self
+        viewController?.updateDesktopActions()
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool { true }
 
     private func openTypedPath(_ value: String) {
         var path = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -922,6 +985,9 @@ extension CommanderPane: UITableViewDragDelegate, UITableViewDropDelegate {
     func tableView(_ tableView: UITableView, canHandle session: UIDropSession) -> Bool {
         guard viewController?.externalDropInProgress != true, viewController?.fileOperationInProgress != true,
               viewController?.presentedViewController == nil, !session.items.isEmpty else { return false }
+#if targetEnvironment(macCatalyst)
+        if session.items.allSatisfy({ $0.localObject is OneDriveSelection }) { return true }
+#endif
         if session.localDragSession?.localContext is CommanderPane {
             return session.items.allSatisfy { $0.localObject is FileEntry }
         }
@@ -945,7 +1011,7 @@ extension CommanderPane: UITableViewDragDelegate, UITableViewDropDelegate {
               let target = targetForDrop(in: tableView, session: session), target.canWriteDirectory() else {
             return UITableViewDropProposal(operation: .forbidden)
         }
-        let internalDrag = session.localDragSession?.localContext is CommanderPane
+        let internalDrag = session.localDragSession != nil
         let operation: UIDropOperation = internalDrag && session.allowsMoveOperation && viewController?.moveMode == true ? .move : .copy
         return UITableViewDropProposal(operation: operation, intent: .insertIntoDestinationIndexPath)
     }
@@ -955,6 +1021,15 @@ extension CommanderPane: UITableViewDragDelegate, UITableViewDropDelegate {
               let target = targetForDrop(in: tableView, session: coordinator.session), target.canWriteDirectory(),
               let controller = viewController else { return }
         controller.activePane = self
+#if targetEnvironment(macCatalyst)
+        let online = coordinator.items.compactMap { $0.dragItem.localObject as? OneDriveSelection }
+        if let first = online.first {
+            guard online.count == coordinator.items.count, online.allSatisfy({ $0.browser === first.browser && $0.generation == first.generation }) else { return }
+            let selection = OneDriveSelection(browser: first.browser, items: online.flatMap(\.items), generation: first.generation)
+            first.browser.exportOnline(selection, to: target.url, move: coordinator.proposal.operation == .move)
+            return
+        }
+#endif
         if let sourcePane = coordinator.session.localDragSession?.localContext as? CommanderPane {
             // Use the actual drag payload, never a selection that may have changed.
             let sources = coordinator.items.compactMap { $0.dragItem.localObject as? FileEntry }
@@ -981,6 +1056,9 @@ extension CommanderPane: UITableViewDragDelegate, UITableViewDropDelegate {
 
 extension CommanderPane {
     func selectedEntries() -> [FileEntry] {
+#if targetEnvironment(macCatalyst)
+        if onlineNavigation != nil { return [] }
+#endif
         return visibleEntries.filter { selectedKeys.contains($0.key()) }
     }
 }

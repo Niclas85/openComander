@@ -2,6 +2,24 @@ import Foundation
 import CryptoKit
 import Darwin
 
+/// Remote audit entries are not local filesystem undo records. Persist only
+/// human-readable locations, never credentials or temporary download URLs.
+struct CloudOperationRecord: Codable, Equatable {
+    let action: String
+    let source: String
+    let destination: String
+    var createdAt = Date()
+}
+
+enum OperationType: Codable {
+    case delete(files: [FileUndoRecord])
+    case move(files: [FileUndoRecord])
+    case copy(files: [FileUndoRecord])
+    case zip(record: FileUndoRecord)
+    case rename(record: FileUndoRecord)
+    case cloud(record: CloudOperationRecord)
+}
+
 /// Desktop selection rules mirror the Linux context menu and ZIP toolbar.
 enum DesktopInteractionPolicy {
     static func contextSelection(clicked: String, selected: Set<String>) -> Set<String> {

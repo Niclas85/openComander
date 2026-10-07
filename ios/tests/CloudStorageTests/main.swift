@@ -17,6 +17,7 @@ func check(_ condition: @autoclosure () -> Bool, _ message: String) {
 let google = try directory("Library/CloudStorage/GoogleDrive-test@example.invalid")
 let myDrive = try directory("Library/CloudStorage/GoogleDrive-test@example.invalid/Meine Ablage")
 let oneDrive = try directory("Library/CloudStorage/OneDrive-Personal")
+let sharedOneDrive = try directory("Library/CloudStorage/OneDrive-FreigegebeneBibliotheken–oneDrive")
 check(HostFileSystem.cloudClientName(for: oneDrive) == "OneDrive", "OneDrive provider recovery action")
 check(HostFileSystem.cloudClientName(for: google) == "Google Drive", "Google provider recovery action")
 let settingsSuite = "OpenCommander-Locations-Test-" + UUID().uuidString
@@ -42,6 +43,7 @@ _ = try directory("Library/CloudStorage/AnotherProvider-Account")
 _ = try directory("Library/Mobile Documents/com~apple~CloudDocs")
 _ = try directory("OneDrive - Legacy Company")
 let archived = try directory("Library/CloudStorage/GoogleDrive-test@example.invalid (old)")
+_ = try directory("Library/CloudStorage/GoogleDrive-test@example.invalid (09.09.26 08:32)")
 try Data().write(to: archived.appendingPathComponent(".drive_fs_ignore_preserved_domain"))
 try fm.createSymbolicLink(at: fixture.appendingPathComponent("OneDrive"), withDestinationURL: oneDrive)
 try fm.createSymbolicLink(at: fixture.appendingPathComponent("Google Drive"), withDestinationURL: google)
@@ -50,11 +52,30 @@ try fm.createSymbolicLink(at: fixture.appendingPathComponent("Library/CloudStora
 try Data().write(to: fixture.appendingPathComponent("Library/CloudStorage/not-a-folder"))
 
 let locations = HostFileSystem.cloudStorageLocations(in: fixture)
-check(locations.count == 8, "all providers, multiple accounts, legacy and iCloud discovered")
+check(locations.count == 10, "all providers, multiple accounts, legacy and iCloud discovered")
 check(locations.filter { $0.url == oneDrive.standardizedFileURL }.count == 1, "OneDrive link deduplicated")
-check(locations.filter { $0.name.hasPrefix("Google Drive —") }.count == 2, "Google account plus archive")
+check(locations.filter { $0.name.hasPrefix("Google Drive —") }.count == 3, "Google account plus archives")
 check(locations.last?.isLocalArchive == true, "preserved domain distinguished and sorted last")
-check(locations.filter { $0.isLocalArchive }.count == 1, "only marked domain is archived")
+check(locations.filter { $0.isLocalArchive }.count == 2, "marked and dated preserved domains are archived")
+check(locations.filter { $0.isLocalArchive }.allSatisfy { !$0.visibleByDefault }, "archives hidden by default")
+check(locations.filter { !$0.isLocalArchive }.allSatisfy { $0.visibleByDefault }, "healthy provider folders visible")
+let disabledLocation = HostFileSystem.StorageLocation(name: "OneDrive", url: oneDrive,
+    kind: .cloudStorage, isDisabled: true)
+check(!disabledLocation.visibleByDefault, "disabled provider hidden by default")
+check(locations.first { $0.url == sharedOneDrive.resolvingSymlinksInPath().standardizedFileURL }?.name == L10n.get("onedrive_shared_local"),
+      "shared library has a meaningful local label")
+let onlinePreference = DesktopLocationPreference(path: DesktopLocationPreferences.oneDriveOnlinePath,
+    name: "Meine Online-Dateien", enabled: false, custom: false)
+DesktopLocationPreferences.save([onlinePreference], to: isolatedDefaults)
+check(DesktopLocationPreferences.load(from: isolatedDefaults).first?.name == "Meine Online-Dateien",
+      "online location name persists")
+check(DesktopLocationPreferences.load(from: isolatedDefaults).first?.enabled == false,
+      "online location visibility persists")
+var explicitPreference = onlinePreference
+explicitPreference.visibilityConfigured = true
+DesktopLocationPreferences.save([explicitPreference], to: isolatedDefaults)
+check(DesktopLocationPreferences.load(from: isolatedDefaults).first?.visibilityConfigured == true,
+      "explicit visibility choice persists")
 print("PASS discovery: Google Drive, OneDrive multi-account, iCloud, third-party, legacy, links and archives")
 let customDropbox = try directory("Custom Sync/Dropbox")
 _ = try directory(".dropbox")

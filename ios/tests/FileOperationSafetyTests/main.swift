@@ -173,3 +173,18 @@ try check(!DesktopInteractionPolicy.showsExtraction(archiveContext: false, selec
 try check(DesktopInteractionPolicy.showsExtraction(archiveContext: false, selectedArchives: [true]), "show extraction for ZIP")
 try check(DesktopInteractionPolicy.showsExtraction(archiveContext: true, selectedArchives: []), "show extraction inside ZIP")
 print("PASS: Linux desktop context-selection and ZIP-action parity")
+let cloudRecord = CloudOperationRecord(action: "Verschieben", source: "OneDrive online:/Quelle/Grüsse.txt", destination: "OneDrive online:/Ziel/Grüsse.txt")
+let cloudData = try JSONEncoder().encode(cloudRecord)
+try check(JSONDecoder().decode(CloudOperationRecord.self, from: cloudData) == cloudRecord,
+          "cloud history preserves action, Unicode locations and completion date across restart")
+print("PASS: persistent cloud audit history round-trip")
+let mixedHistory: [OperationType] = [.copy(files: [permissionsRecord]), .cloud(record: cloudRecord)]
+let decodedHistory = try JSONDecoder().decode([OperationType].self, from: JSONEncoder().encode(mixedHistory))
+try check(decodedHistory.count == 2, "local and online history coexist")
+if case .copy(let files) = decodedHistory[0] {
+    try check(files.first?.destination == permissionsTarget, "existing local undo schema preserved")
+} else { fatalError("FAIL: local history type changed") }
+if case .cloud(let record) = decodedHistory[1] {
+    try check(record == cloudRecord, "cloud history restored without local undo paths")
+} else { fatalError("FAIL: cloud history type changed") }
+print("PASS: mixed local undo and cloud audit history compatibility")

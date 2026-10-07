@@ -93,6 +93,16 @@ precondition(rawBatch.items[0].isOriginal)
 try check(Data(contentsOf: rawBatch.items[0].url) == bytes)
 print("PASS raw external file-URL representation")
 
+let extensionless = root.appendingPathComponent("UnbekannterDateityp")
+try bytes.write(to: extensionless)
+let unknownProvider = FileDropTransfer.provider(for: extensionless)
+precondition(unknownProvider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier))
+let unknownBatch = try loaded([unknownProvider])
+defer { unknownBatch.releaseResources() }
+precondition(unknownBatch.items[0].isOriginal)
+try check(Data(contentsOf: unknownBatch.items[0].url) == bytes)
+print("PASS extensionless files export explicit file URLs and remain readable")
+
 let slow = NSItemProvider()
 slow.registerFileRepresentation(forTypeIdentifier: UTType.data.identifier, fileOptions: [], visibility: .all) { completion in
     DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) { completion(source, false, nil) }

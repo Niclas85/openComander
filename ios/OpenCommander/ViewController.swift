@@ -11,14 +11,6 @@ import MediaPlayer
 #endif
 
 
-enum OperationType: Codable {
-    case delete(files: [FileUndoRecord])
-    case move(files: [FileUndoRecord])
-    case copy(files: [FileUndoRecord])
-    case zip(record: FileUndoRecord)
-    case rename(record: FileUndoRecord)
-}
-
 private final class ImageViewerViewController: UIViewController {
     private enum Media { case image(UIImage), playback(URL) }
     private let entries: [FileEntry]
@@ -31,6 +23,7 @@ private final class ImageViewerViewController: UIViewController {
     private let loadingIndicator = UIActivityIndicatorView(style: .large)
     private let retryButton = UIButton(type: .system)
     private var readCoordinator: NSFileCoordinator?
+    private var vectorPreviewRequest: QLThumbnailGenerator.Request?
     private let playerController = AVPlayerViewController()
     private var playerStatus: NSKeyValueObservation?
 
@@ -186,6 +179,8 @@ private final class ImageViewerViewController: UIViewController {
 
     @objc private func closeViewer() {
         stopPlayback()
+        if let vectorPreviewRequest { QLThumbnailGenerator.shared.cancel(vectorPreviewRequest) }
+        vectorPreviewRequest = nil
         loadGeneration += 1
         readCoordinator?.cancel()
         dismiss(animated: true)
@@ -194,6 +189,8 @@ private final class ImageViewerViewController: UIViewController {
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         stopPlayback()
+        if let vectorPreviewRequest { QLThumbnailGenerator.shared.cancel(vectorPreviewRequest) }
+        vectorPreviewRequest = nil
         loadGeneration += 1
         readCoordinator?.cancel()
     }
@@ -237,6 +234,8 @@ private final class ImageViewerViewController: UIViewController {
     }
 
     private func showCurrentImage() {
+        if let vectorPreviewRequest { QLThumbnailGenerator.shared.cancel(vectorPreviewRequest) }
+        vectorPreviewRequest = nil
         stopPlayback()
         playerController.view.isHidden = true
         let entry = entries[index]
@@ -254,6 +253,25 @@ private final class ImageViewerViewController: UIViewController {
         let generation = loadGeneration
         let scale = UIScreen.main.scale
         let maximumPixelSize = max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * scale * 2
+
+        if entry.mimeType() == "image/svg+xml", entry.isPhysical() {
+            let request = QLThumbnailGenerator.Request(fileAt: entry.url,
+                size: CGSize(width: min(2048, maximumPixelSize), height: min(2048, maximumPixelSize)), scale: 1, representationTypes: .thumbnail)
+            vectorPreviewRequest = request
+            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { [weak self] representation, error in
+                DispatchQueue.main.async {
+                    guard let self, self.loadGeneration == generation else { return }
+                    self.vectorPreviewRequest = nil; self.readCoordinator = nil
+                    self.loadingIndicator.stopAnimating()
+                    if let representation { self.imageView.image = representation.uiImage }
+                    else {
+                        self.errorLabel.text = error?.localizedDescription ?? L10n.get("preview_unavailable")
+                        self.errorLabel.isHidden = false; self.retryButton.isHidden = false
+                    }
+                }
+            }
+            return
+        }
 
         DispatchQueue.global(qos: .userInitiated).async {
             let result: Result<Media, Error> = autoreleasepool {
@@ -332,6 +350,7 @@ private final class DesktopLocationSettingsViewController: UITableViewController
     var defaultAppRequested: (() -> Void)?
     var legalRequested: (() -> Void)?
     var oneDriveRequested: (() -> Void)?
+    var locationDetails: [String: String] = [:]
 
     init(entries: [DesktopLocationPreference], changed: @escaping ([DesktopLocationPreference]) -> Void,
          chooseFolder: @escaping (@escaping (URL?) -> Void) -> Void) {
@@ -356,6 +375,9 @@ private final class DesktopLocationSettingsViewController: UITableViewController
     }
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
         section == 1 ? L10n.get("location_settings_help") : nil
+    }
+    override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+        section == 1 ? L10n.get("location_settings") : nil
     }
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         if indexPath.section == 0 {
@@ -405,7 +427,9 @@ private final class DesktopLocationSettingsViewController: UITableViewController
         }
         let entry = entries[indexPath.row]
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
-        cell.textLabel?.text = entry.name; cell.detailTextLabel?.text = entry.path
+        cell.textLabel?.text = entry.name
+        cell.detailTextLabel?.text = locationDetails[entry.path] ?? entry.path
+        cell.detailTextLabel?.numberOfLines = 2
         cell.accessibilityIdentifier = "LocationSetting-\(entry.path)"
         let toggle = UISwitch()
         toggle.isOn = entry.enabled
@@ -414,6 +438,7 @@ private final class DesktopLocationSettingsViewController: UITableViewController
         toggle.addAction(UIAction { [weak self, weak toggle] _ in
             guard let self, let index = self.entries.firstIndex(where: { $0.path == entry.path }) else { return }
             self.entries[index].enabled = toggle?.isOn == true
+            self.entries[index].visibilityConfigured = true
             self.save()
         }, for: .valueChanged)
         cell.accessoryView = toggle
@@ -633,6 +658,7 @@ class ViewController: UIViewController {
     var historyPanel: UIView!
     var progressText: UILabel!
     var progressBar: UIProgressView!
+    private let progressActivity = UIActivityIndicatorView(style: .medium)
     var globalStatus: UILabel!
 
     func dp(_ value: CGFloat) -> CGFloat {
@@ -783,12 +809,18 @@ class ViewController: UIViewController {
         progressText.numberOfLines = 0
         
         let progressContainer = UIView()
+        progressActivity.removeFromSuperview()
+        progressActivity.translatesAutoresizingMaskIntoConstraints = false
+        progressActivity.accessibilityIdentifier = "CloudTransferProgress"
+        progressContainer.addSubview(progressActivity)
         progressContainer.addSubview(progressText)
         progressText.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             progressText.topAnchor.constraint(equalTo: progressContainer.topAnchor, constant: dp(8)),
             progressText.bottomAnchor.constraint(equalTo: progressContainer.bottomAnchor, constant: -dp(3)),
-            progressText.leadingAnchor.constraint(equalTo: progressContainer.leadingAnchor, constant: dp(4)),
+            progressActivity.leadingAnchor.constraint(equalTo: progressContainer.leadingAnchor, constant: dp(4)),
+            progressActivity.centerYAnchor.constraint(equalTo: progressText.centerYAnchor),
+            progressText.leadingAnchor.constraint(equalTo: progressContainer.leadingAnchor, constant: dp(30)),
             progressText.trailingAnchor.constraint(equalTo: progressContainer.trailingAnchor, constant: -dp(4))
         ])
         progressContainer.setContentHuggingPriority(.required, for: .vertical)
@@ -1008,10 +1040,18 @@ class ViewController: UIViewController {
     }
 
     func updateDesktopActions() {
+#if targetEnvironment(macCatalyst)
+        let local = activePane?.onlineNavigation == nil
+        for button in [renameButton, deleteButton] { button?.isEnabled = (local || activePane?.onlineBrowser?.hasSelection == true) && !operationInProgress }
+        zipButton?.isEnabled = (local || activePane?.onlineBrowser?.hasSelection == true) && !operationInProgress
+#endif
         let selected = activePane?.selectedEntries() ?? []
         let archiveContext = activePane?.currentDirectory.isZipEntry() == true || activePane?.currentDirectory.isZipArchive() == true
-        let showsExtraction = DesktopInteractionPolicy.showsExtraction(archiveContext: archiveContext,
+        var showsExtraction = DesktopInteractionPolicy.showsExtraction(archiveContext: archiveContext,
             selectedArchives: selected.map { $0.isZipArchive() || $0.isZipEntry() })
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { showsExtraction = browser.hasSelectedArchives }
+#endif
         extractActionButton?.isHidden = !showsExtraction
         extractActionButton?.isEnabled = !operationInProgress && showsExtraction
         desktopActionToolbar?.setNeedsLayout()
@@ -1243,7 +1283,9 @@ private extension ViewController {
         var locations: [(name: String, url: URL, category: String)] = [
             (L10n.get("mac_location"), URL(fileURLWithPath: "/", isDirectory: true), L10n.get("mac_location")),
             (L10n.get("home_folder"), HostFileSystem.homeDirectory, L10n.get("home_folder")),
-            (L10n.get("downloads_folder"), HostFileSystem.downloadsDirectory, L10n.get("downloads_folder"))
+            (L10n.get("downloads_folder"), HostFileSystem.downloadsDirectory, L10n.get("downloads_folder")),
+            (L10n.get("location_desktop"), HostFileSystem.desktopDirectory, L10n.get("home_folder")),
+            (L10n.get("location_documents"), HostFileSystem.homeDirectory.appendingPathComponent("Documents"), L10n.get("home_folder"))
         ]
         for location in discoveredLocations {
             let category: String
@@ -1252,7 +1294,10 @@ private extension ViewController {
             case .networkShare: category = L10n.get("network_share")
             case .cloudStorage: category = L10n.get("cloud_storage")
             }
-            let name = location.isLocalArchive ? "\(location.name) — \(L10n.get("cloud_local_archive"))" : location.name
+            let path = location.url.resolvingSymlinksInPath().standardizedFileURL.path
+            let preference = DesktopLocationPreferences.load().first { $0.path == path }
+            if !location.visibleByDefault && preference?.visibilityConfigured != true && preference?.custom != true { continue }
+            let name = location.displayName
             locations.append((name, location.url, category))
         }
 
@@ -1274,11 +1319,23 @@ private extension ViewController {
         connections.accessibilityIdentifier = "DesktopAction-connections"
         connections.addTarget(self, action: #selector(showConnections), for: .touchUpInside)
         stack.addArrangedSubview(connections)
+        let onlinePreference = preferences.first { $0.path == DesktopLocationPreferences.oneDriveOnlinePath }
+        if onlinePreference?.enabled != false {
+            let online = miniButton(label: onlinePreference?.name ?? "OneDrive online")
+            online.accessibilityIdentifier = "Location-OneDriveOnline"
+            online.addAction(UIAction { [weak self] _ in self?.openOneDriveOnline() }, for: .touchUpInside)
+            stack.addArrangedSubview(online)
+        }
         for location in locations where addedPaths.insert(location.url.resolvingSymlinksInPath().standardizedFileURL.path).inserted {
             let preference = preferences.first { $0.path == location.url.resolvingSymlinksInPath().standardizedFileURL.path }
             if preference?.enabled == false { continue }
             let button = UIButton(type: .system)
-            button.setTitle(preference?.name ?? location.name, for: .normal)
+            let stockHomeNames = ["Home Folder", "Benutzerordner"]
+            let discovered = discoveredLocations.first { $0.url == location.url }
+            let legacyName = discovered?.previousDefaultNames.contains(preference?.name ?? "") == true
+            let title = legacyName ? location.name : location.url == HostFileSystem.homeDirectory && stockHomeNames.contains(preference?.name ?? "")
+                ? L10n.get("home_folder") : preference?.name ?? location.name
+            button.setTitle(title, for: .normal)
             button.setTitleColor(theme.primaryText, for: .normal)
             button.titleLabel?.font = .systemFont(ofSize: 11, weight: .medium)
             button.titleLabel?.lineBreakMode = .byTruncatingMiddle
@@ -1288,7 +1345,7 @@ private extension ViewController {
             button.layer.borderWidth = 1
             button.layer.cornerRadius = 6
             button.contentEdgeInsets = UIEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
-            button.accessibilityLabel = "\(location.category): \(preference?.name ?? location.name)"
+            button.accessibilityLabel = "\(location.category): \(title)"
             button.accessibilityIdentifier = "Location-\(location.url.standardizedFileURL.path)"
             button.addAction(UIAction { [weak self] _ in
                 guard let self, let pane = self.activePane ?? self.leftPane else { return }
@@ -1576,6 +1633,9 @@ extension ViewController {
     }
     
     func selectedPanes() -> [CommanderPane] {
+#if targetEnvironment(macCatalyst)
+        if activePane?.onlineNavigation != nil { return [] }
+#endif
         if let active = activePane, !active.selectedKeys.isEmpty {
             return [active]
         }
@@ -1601,7 +1661,7 @@ extension ViewController {
         globalStatus.text = msg
     }
 
-    func showProgress(_ message: String, progress: Int, cancellable: Bool = false) {
+    func showProgress(_ message: String, progress: Int, cancellable: Bool = false, indeterminate: Bool = false, onCancel: (() -> Void)? = nil) {
         operationInProgress = true
         operationCancellation.reset()
         view.subviews.forEach { $0.isUserInteractionEnabled = false }
@@ -1611,6 +1671,7 @@ extension ViewController {
             button.addAction(UIAction { [weak self, weak button] _ in
                 self?.operationCancellation.cancel()
                 self?.operationReadCoordinator?.cancel()
+                onCancel?()
                 button?.isEnabled = false
             }, for: .touchUpInside)
             view.addSubview(button)
@@ -1620,17 +1681,20 @@ extension ViewController {
             cancelOperationButton = button
         }
         progressText.text = message
-        progressBar.isHidden = false
+        progressBar.isHidden = indeterminate
+        if indeterminate { progressActivity.startAnimating() } else { progressActivity.stopAnimating() }
         progressBar.progress = Float(progress) / 100
         updateGlobalStatus(message)
     }
 
     func updateProgress(progress: Int) {
+        progressActivity.stopAnimating()
         progressBar.isHidden = false
         progressBar.progress = Float(max(0, min(100, progress))) / 100
     }
 
     func finishProgress(_ message: String) {
+        progressActivity.stopAnimating()
         operationReadCoordinator = nil
         operationInProgress = false
         cancelOperationButton?.removeFromSuperview()
@@ -1673,10 +1737,14 @@ extension ViewController {
         case .copy(let files): return String(format: L10n.get("copy_label"), files.count)
         case .zip: return String(format: L10n.get("zip_label"), 1)
         case .rename(let record): return String(format: L10n.get("renamed_item"), record.destination.lastPathComponent)
+        case .cloud(let record): return record.action
         }
     }
     
     @objc func confirmDeleteSelection() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.deleteOnlineSelection(); return }
+#endif
         let panes = selectedPanes()
         if panes.isEmpty {
             updateGlobalStatus(L10n.get("no_file_selected"))
@@ -1771,6 +1839,9 @@ extension ViewController {
     }
     
     @objc func showRenameDialog() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.renameOnlineSelection(); return }
+#endif
         let panes = selectedPanes()
         let sources = selectedEntriesFromPanes(panes)
         if sources.count != 1 {
@@ -1834,6 +1905,19 @@ extension ViewController {
 
 extension ViewController {
     func runFileOperation(sourcePane: CommanderPane, targetDirectory: FileEntry) {
+#if targetEnvironment(macCatalyst)
+        let targetBrowser = [leftPane, rightPane].compactMap { $0 }.first { $0.currentDirectory === targetDirectory }?.onlineBrowser
+        if let source = sourcePane.onlineBrowser {
+            if let targetBrowser { targetBrowser.receiveOnline(source.selection, move: moveMode) }
+            else if targetDirectory.canWriteDirectory() { source.exportOnline(source.selection, to: targetDirectory.url, move: moveMode) }
+            return
+        }
+        if let targetBrowser {
+            let entries = sourcePane.selectedEntries()
+            guard entries.allSatisfy({ $0.isPhysical() }) else { updateGlobalStatus(L10n.get("zip_read_only")); return }
+            targetBrowser.receiveLocal(entries.map(\.url), move: moveMode); return
+        }
+#endif
         if sourcePane.selectedKeys.isEmpty {
             updateGlobalStatus(L10n.get("no_file_selected"))
             return
@@ -1877,6 +1961,14 @@ extension ViewController {
 
     func runFileOperation(sources: [FileEntry], sourcePane: CommanderPane?, targetDirectory: FileEntry,
                           move: Bool, completion: @escaping () -> Void = {}) {
+#if targetEnvironment(macCatalyst)
+        if sourcePane?.onlineNavigation != nil || [leftPane, rightPane].contains(where: {
+            $0?.onlineNavigation != nil && $0?.currentDirectory === targetDirectory
+        }) {
+            updateGlobalStatus("OneDrive online: Aktionen → Datei hochladen / Herunterladen")
+            completion(); return
+        }
+#endif
         guard !fileOperationInProgress, presentedViewController == nil else {
             updateGlobalStatus(L10n.get("drop_busy"))
             completion()
@@ -2005,6 +2097,12 @@ extension ViewController {
 
 extension ViewController {
     @objc func extractSelection() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.extractOnlineSelection(); return }
+#endif
+#if targetEnvironment(macCatalyst)
+        if activePane?.onlineNavigation != nil { return }
+#endif
         guard !operationInProgress, let pane = activePane else { return }
         let selected = pane.selectedEntries()
         let source = selected.first ?? pane.currentDirectory!
@@ -2126,6 +2224,9 @@ extension ViewController {
         // ZIP uses one pane, matching Android; selections in the other pane
         // must not unexpectedly add unrelated files to the archive.
         guard !operationInProgress, presentedViewController == nil else { return }
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.zipOnlineSelection(); return }
+#endif
         let pane = activePane ?? leftPane
         let sources = pane?.selectedEntries() ?? []
         if sources.isEmpty {
@@ -2256,7 +2357,12 @@ extension ViewController {
     }
     
     @objc func undoLastOperation() {
-        undoOperation(at: operationHistory.count - 1)
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.undoOnlineOperation(); return }
+#endif
+        if let index = operationHistory.lastIndex(where: { if case .cloud = $0 { return false }; return true }) {
+            undoOperation(at: index)
+        } else { updateGlobalStatus(L10n.get("undo_empty")) }
     }
 
     private func undoOperation(at index: Int) {
@@ -2266,6 +2372,7 @@ extension ViewController {
             return
         }
         let lastOp = operationHistory[index]
+        if case .cloud = lastOp { return }
         showProgress(String(format: L10n.get("undo_progress"), operationLabel(lastOp)), progress: 0)
         DispatchQueue.global(qos: .userInitiated).async {
             do {
@@ -2278,6 +2385,7 @@ extension ViewController {
                     for file in files.reversed() { try file.undo(move: false) }
                 case .zip(let record): try record.undo(move: false)
                 case .rename(let record): try record.undo(move: true)
+                case .cloud: break
                 }
                 
                 DispatchQueue.main.async {
@@ -2298,6 +2406,7 @@ extension ViewController {
                         files.filter { !$0.completed }.forEach { $0.lastError = error.localizedDescription }
                         self.operationHistory[index] = .copy(files: files.filter { !$0.completed })
                     case .zip(let record), .rename(let record): record.lastError = error.localizedDescription
+                    case .cloud: break
                     }
                     // Also persist failed single-item undo/partial retry state.
                     if let data = try? JSONEncoder().encode(self.operationHistory) {
@@ -2492,6 +2601,17 @@ extension ViewController {
         } else {
             for index in operationHistory.indices.reversed() {
                 let op = operationHistory[index]
+                if case .cloud(let record) = op {
+                    let label = UILabel()
+                    let date = DateFormatter.localizedString(from: record.createdAt, dateStyle: .short, timeStyle: .short)
+                    label.text = "OneDrive online · \(record.action) · \(date)\n\(record.source) → \(record.destination)"
+                    label.numberOfLines = 0
+                    label.font = .systemFont(ofSize: 12)
+                    label.textColor = theme.primaryText
+                    label.accessibilityIdentifier = "CloudHistoryEntry-\(index)"
+                    stack.addArrangedSubview(label)
+                    continue
+                }
                 let title: String
                 switch op {
                 case .delete(let files): title = String(format: L10n.get("deleted_items"), files.count)
@@ -2499,12 +2619,14 @@ extension ViewController {
                 case .copy(let files): title = String(format: L10n.get("copied_items"), files.count)
                 case .zip(let record): title = String(format: L10n.get("zip_created"), record.destination.lastPathComponent)
                 case .rename(let record): title = String(format: L10n.get("renamed_item"), record.destination.lastPathComponent)
+                case .cloud(let record): title = record.action
                 }
                 let item = miniButton(label: title)
                 let records: [FileUndoRecord]
                 switch op {
                 case .delete(let values), .move(let values), .copy(let values): records = values
                 case .zip(let value), .rename(let value): records = [value]
+                case .cloud: records = []
                 }
                 if let first = records.first {
                     let date = DateFormatter.localizedString(from: first.createdAt, dateStyle: .short, timeStyle: .short)
@@ -2731,14 +2853,39 @@ extension ViewController: UIDocumentPickerDelegate {
         DispatchQueue.global(qos: .utility).async {
             let locations = HostFileSystem.availableStorageLocations()
             var entries = DesktopLocationPreferences.load()
+            var details: [String: String] = [:]
             let builtins = [(L10n.get("mac_location"), URL(fileURLWithPath: "/", isDirectory: true)),
                 (L10n.get("home_folder"), HostFileSystem.homeDirectory),
-                (L10n.get("downloads_folder"), HostFileSystem.downloadsDirectory)] + locations.map { ($0.name, $0.url) }
+                (L10n.get("downloads_folder"), HostFileSystem.downloadsDirectory),
+                (L10n.get("location_desktop"), HostFileSystem.desktopDirectory),
+                (L10n.get("location_documents"), HostFileSystem.homeDirectory.appendingPathComponent("Documents"))] + locations.map { ($0.displayName, $0.url) }
             for (name, url) in builtins {
                 let path = url.resolvingSymlinksInPath().standardizedFileURL.path
-                if !entries.contains(where: { $0.path == path }) {
-                    entries.append(DesktopLocationPreference(path: path, name: name, enabled: true, custom: false))
+                let discovered = locations.first { $0.url.resolvingSymlinksInPath().standardizedFileURL.path == path }
+                details[path] = path
+                if let discovered, !discovered.visibleByDefault {
+                    details[path] = "\(discovered.displayName)\n\(path)"
                 }
+                if !entries.contains(where: { $0.path == path }) {
+                    entries.append(DesktopLocationPreference(path: path, name: name,
+                        enabled: discovered?.visibleByDefault ?? true, custom: false))
+                } else if let index = entries.firstIndex(where: { $0.path == path }), !entries[index].custom {
+                    if discovered?.visibleByDefault == false && entries[index].visibilityConfigured != true {
+                        entries[index].enabled = false
+                    }
+                    if entries[index].name == discovered?.name || discovered?.previousDefaultNames.contains(entries[index].name) == true ||
+                        (url == HostFileSystem.homeDirectory && ["Home Folder", "Benutzerordner"].contains(entries[index].name)) {
+                        entries[index].name = name
+                    }
+                }
+            }
+            let onlinePath = DesktopLocationPreferences.oneDriveOnlinePath
+            if !entries.contains(where: { $0.path == onlinePath }) {
+                entries.insert(DesktopLocationPreference(path: onlinePath, name: "OneDrive online", enabled: true, custom: false), at: 0)
+            }
+            details[onlinePath] = L10n.get("onedrive_online_location_help")
+            for entry in entries where !entry.custom && entry.path != onlinePath && details[entry.path] == nil {
+                details[entry.path] = "\(L10n.get("location_disconnected"))\n\(entry.path)"
             }
             DispatchQueue.main.async {
                 guard self.presentedViewController == nil, !self.operationInProgress else { return }
@@ -2749,6 +2896,7 @@ extension ViewController: UIDocumentPickerDelegate {
                     bridge.chooseLocation(title: L10n.get("location_add"), completion: completion)
                 })
                 settings.languageChanged = { [weak self] code in self?.applyLanguage(code) }
+                settings.locationDetails = details
                 settings.darkMode = self.darkMode
                 settings.overrideUserInterfaceStyle = self.darkMode ? .dark : .light
                 settings.themeChanged = { [weak self] in self?.toggleDarkModeFromTap() }
@@ -2773,10 +2921,30 @@ extension ViewController: UIDocumentPickerDelegate {
 
     func openOneDriveOnline() {
         guard !operationInProgress, presentedViewController == nil else { return }
-        let navigation = UINavigationController(rootViewController: OneDriveBrowser())
-        navigation.modalPresentationStyle = .pageSheet
+        guard let pane = activePane ?? leftPane else { return }
+        activePane = pane
+        if pane.onlineNavigation != nil { return }
+        let browser = OneDriveBrowser()
+        browser.commander = self
+        browser.paneTitle = pane.title
+        browser.onStateChanged = { [weak self] in self?.updateDesktopActions() }
+        let navigation = UINavigationController(rootViewController: browser)
+        navigation.setNavigationBarHidden(true, animated: false)
         navigation.overrideUserInterfaceStyle = darkMode ? .dark : .light
-        present(navigation, animated: true)
+        browser.onClose = { [weak self, weak pane] in
+            pane?.closeOnline()
+            self?.activePane = pane
+            self?.updateDesktopActions()
+        }
+        browser.onActivate = { [weak self, weak pane] in
+            self?.activePane = pane
+            self?.updateDesktopActions()
+        }
+        addChild(navigation)
+        pane.showOnline(navigation)
+        navigation.didMove(toParent: self)
+        updateDesktopActions()
+        updateGlobalStatus("OneDrive online")
     }
 
     @objc func showConnections() {
@@ -3137,6 +3305,10 @@ extension ViewController: UIDocumentPickerDelegate {
     }
 
     private func placeSelectionOnClipboard(move: Bool) {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { fileClipboard = nil; browser.copyOnlineSelection(move: move); return }
+        OneDriveBrowser.clipboard = nil
+#endif
         guard let pane = activePane else { return }
         let urls = pane.selectedEntries().filter { $0.isPhysical() }.map(\.url)
         guard !urls.isEmpty else {
@@ -3149,6 +3321,19 @@ extension ViewController: UIDocumentPickerDelegate {
     }
 
     @objc func pasteClipboard() {
+#if targetEnvironment(macCatalyst)
+        if let remote = OneDriveBrowser.currentClipboard {
+            if let browser = activePane?.onlineBrowser { browser.receiveOnline(remote.selection, move: remote.move) }
+            else if let target = activePane?.currentDirectory, target.canWriteDirectory() { remote.selection.browser.exportOnline(remote.selection, to: target.url, move: remote.move) }
+            return
+        }
+        if let browser = activePane?.onlineBrowser {
+            let urls = UIPasteboard.general.urls ?? fileClipboard?.urls ?? []
+            let move = fileClipboard?.move == true && fileClipboard?.urls == urls
+            browser.receiveLocal(urls, move: move) { [weak self] in self?.fileClipboard = nil }
+            return
+        }
+#endif
         guard let pane = activePane, let target = pane.currentDirectory else { return }
         guard target.canWriteDirectory() else {
             updateGlobalStatus(L10n.get("target_not_writable"))
@@ -3221,6 +3406,9 @@ extension ViewController: UIDocumentPickerDelegate {
     }
 
     @objc func selectAllInActivePane() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.selectAllOnline(); return }
+#endif
         guard let pane = activePane else { return }
         pane.selectedKeys = Set(pane.visibleEntries.filter { !$0.isUpButton }.map { $0.key() })
         pane.updateSelectionStatus()
@@ -3228,6 +3416,9 @@ extension ViewController: UIDocumentPickerDelegate {
     }
 
     @objc func refreshActivePane() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.refreshOnline(); return }
+#endif
         guard let pane = activePane else { return }
         pane.reloadTreeKeepingExpansion()
         pane.refreshFiles()
@@ -3246,6 +3437,9 @@ extension ViewController: UIDocumentPickerDelegate {
     }
 
     @objc func openSelectedEntry() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.openOnlineSelection(); return }
+#endif
         guard let pane = activePane, let entry = pane.selectedEntries().first else {
             updateGlobalStatus(L10n.get("no_file_selected"))
             return
@@ -3273,6 +3467,9 @@ extension ViewController: UIDocumentPickerDelegate {
 #endif
 
     @objc func previewSelectedEntry() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.previewOnlineSelection(); return }
+#endif
         guard let entry = activePane?.selectedEntries().first else {
             updateGlobalStatus(L10n.get("no_file_selected"))
             return
@@ -3289,6 +3486,9 @@ extension ViewController: UIDocumentPickerDelegate {
     }
 
     @objc func duplicateSelection() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.duplicateOnlineSelection(); return }
+#endif
         guard !operationInProgress, let pane = activePane else { return }
         let sources = pane.selectedEntries().filter { $0.isPhysical() }
         guard !sources.isEmpty else {
@@ -3329,6 +3529,9 @@ extension ViewController: UIDocumentPickerDelegate {
     }
 
     @objc func showFileInfo() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.infoOnlineSelection(); return }
+#endif
         guard !operationInProgress, let entry = activePane?.selectedEntries().first else {
             updateGlobalStatus(L10n.get("no_file_selected"))
             return
@@ -3391,6 +3594,9 @@ extension ViewController: UIDocumentPickerDelegate {
     }
 
     @objc func moveSelectionToTrash() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.deleteOnlineSelection(); return }
+#endif
         let panes = selectedPanes()
         let sources = selectedEntriesFromPanes(panes)
         guard !sources.isEmpty else {
@@ -3422,7 +3628,12 @@ extension ViewController: UIDocumentPickerDelegate {
         present(alert, animated: true)
     }
 
-    @objc func navigateBack() { activePane?.navigateBack() }
+    @objc func navigateBack() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.navigateOnlineBack(); return }
+#endif
+        activePane?.navigateBack()
+    }
     @objc func copyToOtherPane() {
         transferToOtherPane(move: false)
     }
@@ -3432,11 +3643,34 @@ extension ViewController: UIDocumentPickerDelegate {
     private func transferToOtherPane(move: Bool) {
         guard !operationInProgress, let pane = activePane else { return }
         let other = pane === leftPane ? rightPane! : leftPane!
+#if targetEnvironment(macCatalyst)
+        if let source = pane.onlineBrowser {
+            if let target = other.onlineBrowser { target.receiveOnline(source.selection, move: move) }
+            else if other.currentDirectory.canWriteDirectory() { source.exportOnline(source.selection, to: other.currentDirectory.url, move: move) }
+            return
+        }
+        if let target = other.onlineBrowser {
+            let entries = pane.selectedEntries()
+            guard entries.allSatisfy({ $0.isPhysical() }) else { updateGlobalStatus(L10n.get("zip_read_only")); return }
+            target.receiveLocal(entries.map(\.url), move: move)
+            return
+        }
+#endif
         runFileOperation(sources: pane.selectedEntries(), sourcePane: pane,
                          targetDirectory: other.currentDirectory, move: move)
     }
-    @objc func navigateForward() { activePane?.navigateForward() }
-    @objc func navigateUp() { activePane?.navigateUp() }
+    @objc func navigateForward() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.navigateOnlineForward(); return }
+#endif
+        activePane?.navigateForward()
+    }
+    @objc func navigateUp() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.navigateOnlineParent(); return }
+#endif
+        activePane?.navigateUp()
+    }
 
     @objc func openComputerRoot() { openSpecialLocation(URL(fileURLWithPath: "/", isDirectory: true)) }
     @objc func openHomeFolder() { openSpecialLocation(HostFileSystem.homeDirectory) }
@@ -3467,6 +3701,9 @@ extension ViewController: UIDocumentPickerDelegate {
     }
 
     @objc func createFolder() {
+#if targetEnvironment(macCatalyst)
+        if let browser = activePane?.onlineBrowser { browser.createOnlineFolder(); return }
+#endif
         guard let pane = activePane, pane.currentDirectory.canWriteDirectory() else {
             updateGlobalStatus(L10n.get("target_not_writable"))
             return

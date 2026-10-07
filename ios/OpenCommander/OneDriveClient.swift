@@ -1,12 +1,18 @@
 import Foundation
 import Security
+import CryptoKit
 
 struct OneDriveItem: Decodable {
     struct Folder: Decodable { let childCount: Int? }
+    struct ParentReference: Decodable { let id: String? }
     let id: String
     let name: String
     let size: Int64?
     let folder: Folder?
+    let lastModifiedDateTime: String?
+    let eTag: String?
+    var parentReference: ParentReference? = nil
+    var root: [String: String]? = nil
     var isFolder: Bool { folder != nil }
 }
 
@@ -121,7 +127,7 @@ struct OneDriveKeychain: OneDriveTokenStore {
         return true // Preauthenticated content downloads carry no bearer token or OAuth body.
     }
     static func validClientID(_ value: String) -> Bool { UUID(uuidString: value) != nil }
-    static func validName(_ name: String) -> Bool {
+    nonisolated static func validName(_ name: String) -> Bool {
         !name.isEmpty && name != "." && name != ".." && name.count <= 255 &&
         !name.contains(where: { "\\/:*?\"<>|".contains($0) || $0.isNewline || $0.asciiValue.map { $0 < 32 } == true }) &&
         !name.hasSuffix(".") && !name.hasSuffix(" ")
@@ -208,13 +214,14 @@ struct OneDriveKeychain: OneDriveTokenStore {
         url.scheme == "https" && url.host == "graph.microsoft.com" && url.port == nil &&
         url.user == nil && url.password == nil && url.path.hasPrefix("/v1.0/")
     }
-    private func request(_ path: String, method: String = "GET", body: Data? = nil, contentType: String = "application/json") async throws -> Data {
+    private func request(_ path: String, method: String = "GET", body: Data? = nil, contentType: String = "application/json", matching: String? = nil) async throws -> Data {
         guard let url = URL(string: path.hasPrefix("https:") ? path : graph + path), Self.safeGraphURL(url) else {
             throw OneDriveFailure.message("Refused an unexpected OneDrive API address.")
         }
         var request = URLRequest(url: url)
         request.httpMethod = method; request.httpBody = body
         request.setValue("Bearer " + (try await bearer()), forHTTPHeaderField: "Authorization")
+        if let matching { request.setValue(matching, forHTTPHeaderField: "If-Match") }
         if body != nil { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw OneDriveFailure.message("Invalid OneDrive response.") }
@@ -225,7 +232,7 @@ struct OneDriveKeychain: OneDriveTokenStore {
         return data
     }
     func children(of id: String? = nil) async throws -> [OneDriveItem] {
-        var next: String? = itemPath(id) + "/children?$select=id,name,size,folder&$top=200"
+        var next: String? = itemPath(id) + "/children?$select=id,name,size,folder,lastModifiedDateTime,eTag&$top=200"
         var visited = Set<String>(); var result: [OneDriveItem] = []
         while let path = next {
             guard visited.insert(path).inserted else { throw OneDriveFailure.message("OneDrive returned a repeated page.") }
@@ -242,32 +249,176 @@ struct OneDriveKeychain: OneDriveTokenStore {
     }
     func rename(_ item: OneDriveItem, to name: String) async throws {
         guard Self.validName(name) else { throw OneDriveFailure.message("Invalid OneDrive name.") }
-        _ = try await request(itemPath(item.id), method: "PATCH", body: JSONSerialization.data(withJSONObject: ["name": name]))
+        _ = try await request(itemPath(item.id), method: "PATCH", body: JSONSerialization.data(withJSONObject: ["name": name, "@microsoft.graph.conflictBehavior": "fail"]), matching: item.eTag)
     }
     func recycle(_ item: OneDriveItem) async throws { _ = try await request(itemPath(item.id), method: "DELETE") }
+    func metadata(_ id: String? = nil) async throws -> OneDriveItem {
+        try JSONDecoder().decode(OneDriveItem.self, from: try await request(itemPath(id)))
+    }
+    func validateDestination(_ parent: String?, excluding itemID: String) async throws {
+        var next = parent
+        var visited = Set<String>()
+        while let id = next {
+            guard id != itemID, visited.count < 100, visited.insert(id).inserted else { throw OneDriveFailure.message("A folder cannot be transferred into itself or its descendants.") }
+            let data = try await request(itemPath(id) + "?$select=id,parentReference")
+            let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            next = (object?["parentReference"] as? [String: Any])?["id"] as? String
+        }
+    }
+    /// Resolve the real root ID: Graph does not accept "root" in parentReference.
+    func move(_ item: OneDriveItem, parent: String?) async throws {
+        let destination: String
+        if let parent { destination = parent } else { destination = try await metadata().id }
+        guard destination != item.id else { throw OneDriveFailure.message("A folder cannot be moved into itself.") }
+        let data = try JSONSerialization.data(withJSONObject: ["parentReference": ["id": destination], "@microsoft.graph.conflictBehavior": "fail"] as [String: Any])
+        _ = try await request(itemPath(item.id), method: "PATCH", body: data, matching: item.eTag)
+    }
+
+    /// Streaming fingerprints prevent a changed local source from being removed
+    /// after uploading a snapshot. Links and special files are never followed.
+    nonisolated static func localSnapshot(_ url: URL) throws -> [String: String] {
+        var result: [String: String] = [:]
+        func visit(_ url: URL, path: String, depth: Int) throws {
+            guard depth < 100, result.count < 100_000 else { throw OneDriveFailure.message("Folder transfer limit exceeded.") }
+            let values = try url.resourceValues(forKeys: [.isSymbolicLinkKey, .isDirectoryKey, .isRegularFileKey, .fileResourceIdentifierKey, .contentModificationDateKey])
+            guard values.isSymbolicLink != true, Self.validName(url.lastPathComponent) else { throw OneDriveFailure.message("Unsupported link or OneDrive filename: " + url.lastPathComponent) }
+            let identity = String(describing: values.fileResourceIdentifier) + String(describing: values.contentModificationDate)
+            if values.isDirectory == true {
+                result[path] = "directory:" + identity
+                for child in try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil) {
+                    try visit(child, path: path + "/" + child.lastPathComponent, depth: depth + 1)
+                }
+            } else {
+                guard values.isRegularFile == true else { throw OneDriveFailure.message("Only regular files and folders can be transferred.") }
+                let file = try FileHandle(forReadingFrom: url); defer { try? file.close() }
+                var hash = SHA256()
+                while let bytes = try file.read(upToCount: 1024 * 1024), !bytes.isEmpty { hash.update(data: bytes) }
+                result[path] = identity + hash.finalize().map { String(format: "%02x", $0) }.joined()
+            }
+        }
+        try visit(url, path: "", depth: 0)
+        return result
+    }
+    func uploadTree(_ url: URL, parent: String?) async throws {
+        _ = try await Task.detached { try Self.localSnapshot(url) }.value
+        try await uploadTreeValidated(url, parent: parent, depth: 0)
+    }
+    private func uploadTreeValidated(_ url: URL, parent: String?, depth: Int) async throws {
+        try Task.checkCancellation()
+        guard depth < 100 else { throw OneDriveFailure.message("Folder transfer limit exceeded.") }
+        let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        guard values.isSymbolicLink != true else { throw OneDriveFailure.message("Symbolic links cannot be uploaded.") }
+        if values.isDirectory == true {
+            let body = try JSONSerialization.data(withJSONObject: ["name": url.lastPathComponent, "folder": [:], "@microsoft.graph.conflictBehavior": "fail"] as [String: Any])
+            let folder = try JSONDecoder().decode(OneDriveItem.self, from: try await request(itemPath(parent) + "/children", method: "POST", body: body))
+            for child in try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil) {
+                try await uploadTreeValidated(child, parent: folder.id, depth: depth + 1)
+            }
+        } else { try await upload(url, parent: parent) }
+    }
     func upload(_ url: URL, parent: String?) async throws {
         guard Self.validName(url.lastPathComponent) else { throw OneDriveFailure.message("Invalid OneDrive name.") }
         let values = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
-        guard values.isRegularFile == true, (values.fileSize ?? Int.max) <= 20 * 1024 * 1024 else {
-            throw OneDriveFailure.message("This initial online browser supports uploading individual files up to 20 MB.")
-        }
+        guard values.isRegularFile == true, let size = values.fileSize else { throw OneDriveFailure.message("Select a regular file.") }
+        if size > 10 * 1024 * 1024 { try await uploadChunks(url, size: size, parent: parent); return }
         let data = try Data(contentsOf: url)
         guard data.count <= 20 * 1024 * 1024 else { throw OneDriveFailure.message("The file exceeds 20 MB.") }
-        _ = try await request(itemPath(parent) + ":/" + component(url.lastPathComponent) + ":/content?@microsoft.graph.conflictBehavior=fail",
+        let reply = try await request(itemPath(parent) + ":/" + component(url.lastPathComponent) + ":/content?@microsoft.graph.conflictBehavior=fail",
             method: "PUT", body: data, contentType: "application/octet-stream")
+        let uploaded = try JSONDecoder().decode(OneDriveItem.self, from: reply)
+        guard uploaded.size == Int64(data.count) else { throw OneDriveFailure.message("Uploaded size mismatch. Source retained.") }
+    }
+    private func uploadChunks(_ file: URL, size: Int, parent: String?) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["item": ["@microsoft.graph.conflictBehavior": "fail", "name": file.lastPathComponent]])
+        let data = try await request(itemPath(parent) + ":/" + component(file.lastPathComponent) + ":/createUploadSession", method: "POST", body: body)
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let address = object?["uploadUrl"] as? String, let url = URL(string: address), url.scheme == "https", url.user == nil, url.password == nil else { throw OneDriveFailure.message("Invalid upload address.") }
+        let handle = try FileHandle(forReadingFrom: file); defer { try? handle.close() }
+        var offset = 0
+        while offset < size {
+            try Task.checkCancellation()
+            let expected = min(10 * 327_680, size - offset)
+            guard let chunk = try handle.read(upToCount: expected), chunk.count == expected else { throw OneDriveFailure.message("Source changed during upload.") }
+            var request = URLRequest(url: url)
+            request.httpMethod = "PUT"; request.httpBody = chunk
+            request.setValue("bytes \(offset)-\(offset + chunk.count - 1)/\(size)", forHTTPHeaderField: "Content-Range")
+            request.setValue(String(chunk.count), forHTTPHeaderField: "Content-Length")
+            // The upload URL is preauthenticated. Never send our Graph token.
+            let (reply, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.url?.scheme == "https" else { throw OneDriveFailure.message("Invalid upload response.") }
+            offset += chunk.count
+            if offset == size {
+                guard http.statusCode == 200 || http.statusCode == 201 else { throw OneDriveFailure.message("Upload was not committed (HTTP \(http.statusCode)). Source retained.") }
+                let item = try JSONDecoder().decode(OneDriveItem.self, from: reply)
+                guard item.size == Int64(size) else { throw OneDriveFailure.message("Uploaded size mismatch. Source retained.") }
+            } else {
+                let state = try JSONSerialization.jsonObject(with: reply) as? [String: Any]
+                guard http.statusCode == 202, (state?["nextExpectedRanges"] as? [String])?.first == "\(offset)-" else { throw OneDriveFailure.message("Unexpected upload offset. Source retained; refresh before retrying.") }
+            }
+        }
+    }
+    /// Materialize folders in an isolated temporary container, then validate
+    /// their version manifest before a caller may perform a move.
+    func remoteSnapshot(_ item: OneDriveItem) async throws -> [String: String] {
+        var result: [String: String] = [:]
+        func visit(_ item: OneDriveItem, depth: Int) async throws {
+            try Task.checkCancellation()
+            guard depth < 100, result.count < 100_000, result[item.id] == nil else { throw OneDriveFailure.message("Invalid or oversized folder tree.") }
+            let current = try await metadata(item.id)
+            guard let tag = current.eTag else { throw OneDriveFailure.message("OneDrive did not provide a version for safe transfer.") }
+            result[item.id] = tag
+            if current.isFolder { for child in try await children(of: current.id) { try await visit(child, depth: depth + 1) } }
+        }
+        try await visit(item, depth: 0); return result
+    }
+    func recycleUnchanged(_ item: OneDriveItem, snapshot: [String: String]) async throws {
+        guard try await remoteSnapshot(item) == snapshot, let tag = snapshot[item.id] else { throw OneDriveFailure.message("Online source changed. Both copies have been retained.") }
+        // A folder eTag does not atomically guard all its descendants. Preserve
+        // the folder instead of risking removal of concurrently added content.
+        guard !item.isFolder else { throw OneDriveFailure.message("The folder was copied successfully. Its online source was retained because OneDrive cannot atomically verify every child during removal. Move folders within OneDrive, or review and recycle the source explicitly.") }
+        _ = try await request(itemPath(item.id), method: "DELETE", matching: tag)
+    }
+    func downloadTree(_ item: OneDriveItem) async throws -> URL {
+        guard Self.validName(item.name) else { throw OneDriveFailure.message("Unsafe remote filename.") }
+        if !item.isFolder { return try await download(item) }
+        let container = FileManager.default.temporaryDirectory.appendingPathComponent("OpenCommander-OneDrive-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: container, withIntermediateDirectories: false)
+        let root = container.appendingPathComponent(item.name, isDirectory: true)
+        var seen = Set<String>()
+        func visit(_ item: OneDriveItem, at destination: URL, depth: Int) async throws {
+            try Task.checkCancellation()
+            guard Self.validName(item.name), depth < 100, seen.count < 100_000, seen.insert(item.id).inserted else { throw OneDriveFailure.message("Unsafe or oversized remote tree.") }
+            if item.isFolder {
+                try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+                for child in try await children(of: item.id) { try await visit(child, at: destination.appendingPathComponent(child.name), depth: depth + 1) }
+            } else {
+                let downloaded = try await download(item)
+                defer { try? FileManager.default.removeItem(at: downloaded.deletingLastPathComponent()) }
+                try FileManager.default.moveItem(at: downloaded, to: destination)
+            }
+        }
+        do { try await visit(item, at: root, depth: 0); return root }
+        catch { try? FileManager.default.removeItem(at: container); throw error }
     }
     func download(_ item: OneDriveItem) async throws -> URL {
         guard !item.isFolder, Self.validName(item.name) else { throw OneDriveFailure.message("Select an individual file to download.") }
         // Graph metadata yields a short-lived preauthenticated URL. Never forward the bearer token to it.
-        let data = try await request(itemPath(item.id) + "?$select=id,name,@microsoft.graph.downloadUrl")
+        // downloadUrl is an instance annotation, not an ordinary selectable
+        // property. Request the default metadata so Graph includes it.
+        let data = try await request(itemPath(item.id))
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        if let tag = item.eTag, object?["eTag"] as? String != tag { throw OneDriveFailure.message("The online file changed. Refresh and retry.") }
         guard let address = object?["@microsoft.graph.downloadUrl"] as? String,
               let url = URL(string: address), url.scheme == "https", url.user == nil, url.password == nil else {
             throw OneDriveFailure.message("OneDrive did not provide a secure download address.")
         }
         let (temporary, response) = try await session.download(from: url)
+        defer { try? FileManager.default.removeItem(at: temporary) }
         guard let http = response as? HTTPURLResponse, http.statusCode == 200, http.url?.scheme == "https" else {
             throw OneDriveFailure.message("OneDrive download failed.")
+        }
+        if let size = object?["size"] as? NSNumber {
+            guard try temporary.resourceValues(forKeys: [.fileSizeKey]).fileSize == size.intValue else { throw OneDriveFailure.message("Incomplete download. Source retained.") }
         }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("OpenCommander-OneDrive-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

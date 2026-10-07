@@ -114,7 +114,14 @@ enum FileDropTransfer {
         let provider = NSItemProvider(object: url as NSURL)
         provider.suggestedName = url.lastPathComponent
         let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .contentTypeKey])
-        let type = values?.isDirectory == true ? UTType.folder : (values?.contentType ?? .data)
+        let detected = values?.contentType ?? .data
+        // Some extensionless/dynamic files report public.item: that abstract
+        // root is not a file-content representation. Export bytes as data.
+        let type = values?.isDirectory == true ? UTType.folder :
+            ((detected.conforms(to: .data) || detected.conforms(to: .content)) ? detected : .data)
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier, visibility: .all) { completion in
+            completion(Data(url.absoluteString.utf8), nil); return nil
+        }
         provider.registerFileRepresentation(forTypeIdentifier: type.identifier, fileOptions: .openInPlace,
                                             visibility: .all) { completion in
             completion(url, false, nil)
