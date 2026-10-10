@@ -13,6 +13,12 @@ final class CommanderToolsController: UIViewController, UITableViewDataSource, U
     let german = L10n.currentLanguage.hasPrefix("de")
     var onOpen: ((URL) -> Void)?
     var onRename: (([FileUndoRecord]) -> Void)?
+    var onlineRun: (@MainActor (String, Bool, String, [String]) async throws -> [Row])?
+    var onlineApply: (@MainActor () async throws -> Int)?
+    var displayRoot: String?
+    var displayOther: String?
+    private var onlineTask: Task<Void, Never>?
+    func report(_ message: String) { status.text = message }
     private let cancellation = FileOperationCancellation()
     private let table = UITableView(frame: .zero, style: .plain)
     private let status = UILabel()
@@ -21,6 +27,7 @@ final class CommanderToolsController: UIViewController, UITableViewDataSource, U
     private let applyButton = UIButton(type: .system)
     private let fields = (0..<5).map { _ in UITextField() }
     private let searchPath = UITextField()
+    private let caseSensitiveButton = UIButton(type: .system)
     private var rows: [Row] = []
     private var plan: [CommanderTools.Rename] = []
     private var busy = false
@@ -48,8 +55,9 @@ final class CommanderToolsController: UIViewController, UITableViewDataSource, U
         heading.text = mode == .search ? text("Dateien suchen", "Find files") : mode == .compare ? text("Ordner vergleichen", "Compare folders") : text("Mehrfach umbenennen", "Multi-rename")
         stack.addArrangedSubview(heading)
         let info = UILabel(); info.numberOfLines = 0; info.font = .preferredFont(forTextStyle: .caption1)
-        info.text = root.path + (mode == .compare ? "\n↔ " + other.path : "") + "\n" + text("Unterordner werden einbezogen. Keine symbolischen Links verfolgen.", "Includes subfolders. Does not follow symbolic links.")
+        info.text = (displayRoot ?? root.path) + (mode == .compare ? "\n↔ " + (displayOther ?? other.path) : "") + "\n" + text("Unterordner werden einbezogen. Keine symbolischen Links verfolgen.", "Includes subfolders. Does not follow symbolic links.")
         if mode == .rename { info.text = text("[N] Name ohne Erweiterung · [E] Erweiterung mit Punkt · [C] Zähler\nVorschau vor Anwenden. Vorhandene Namen werden niemals ersetzt. Reihenfolge: Auswahl nach Name sortiert.", "[N] Base name · [E] Extension including dot · [C] Counter\nPreview before applying. Existing names are never replaced. Selection sorted by name.") }
+        if mode == .rename && onlineRun != nil { info.text! += "\n" + text("Bei Abbruch bleiben abgeschlossene Umbenennungen in der Historie erhalten.", "On cancellation, completed renames remain in History.") }
         stack.addArrangedSubview(info)
         if mode == .search {
             info.text = text("Suche im angegebenen Ordner und seinen Unterordnern. Symbolischen Links wird nicht gefolgt.", "Searches the chosen folder and its subfolders. Does not follow symbolic links.")
@@ -78,6 +86,17 @@ final class CommanderToolsController: UIViewController, UITableViewDataSource, U
                 line.addArrangedSubview(label); line.addArrangedSubview(fields[i]); stack.addArrangedSubview(line)
             }
         }
+        if mode == .search {
+            caseSensitiveButton.setTitle(text(" Groß-/Kleinschreibung beachten", " Match case"), for: .normal)
+            caseSensitiveButton.setImage(UIImage(systemName: "square"), for: .normal)
+            caseSensitiveButton.setImage(UIImage(systemName: "checkmark.square.fill"), for: .selected)
+            caseSensitiveButton.isSelected = false
+            caseSensitiveButton.contentHorizontalAlignment = .leading
+            caseSensitiveButton.accessibilityIdentifier = "CommanderSearchMatchCase"
+            caseSensitiveButton.accessibilityValue = text("Abgewählt", "Unchecked")
+            caseSensitiveButton.addTarget(self, action: #selector(toggleSearchCase), for: .touchUpInside)
+            stack.addArrangedSubview(caseSensitiveButton)
+        }
         let controls = UIStackView(); controls.spacing = 20
         runButton.setTitle(mode == .rename ? text("Vorschau", "Preview") : text("Starten", "Start"), for: .normal)
         runButton.accessibilityIdentifier = "CommanderToolRun"
@@ -96,18 +115,29 @@ final class CommanderToolsController: UIViewController, UITableViewDataSource, U
         table.rowHeight = UITableView.automaticDimension; table.estimatedRowHeight = 72
         stack.addArrangedSubview(table)
     }
-    @objc private func invalidatePlan() { plan = []; applyButton.isEnabled = false }
+    @objc private func invalidatePlan() {
+        plan = []; applyButton.isEnabled = false
+        if onlineRun != nil { rows = []; table.reloadData() }
+    }
+    @objc private func toggleSearchCase() {
+        caseSensitiveButton.isSelected.toggle()
+        caseSensitiveButton.accessibilityValue = caseSensitiveButton.isSelected
+            ? text("Ausgewählt", "Checked") : text("Abgewählt", "Unchecked")
+        if caseSensitiveButton.isSelected { caseSensitiveButton.accessibilityTraits.insert(.selected) }
+        else { caseSensitiveButton.accessibilityTraits.remove(.selected) }
+    }
     private func setBusy(_ value: Bool) {
         busy = value; runButton.isEnabled = !value
         fields.forEach { $0.isEnabled = !value }
         searchPath.isEnabled = !value
-        applyButton.isEnabled = !value && !plan.isEmpty
+        caseSensitiveButton.isEnabled = !value
+        applyButton.isEnabled = !value && (!plan.isEmpty || (onlineApply != nil && !rows.isEmpty))
         if value { spinner.startAnimating(); status.text = text("Wird verarbeitet … Cloud-Dateien werden ggf. heruntergeladen.", "Working … Cloud files may need to download.") }
         else { spinner.stopAnimating() }
     }
     @objc private func close() {
         if busy {
-            cancellation.cancel(); status.text = text("Wird abgebrochen …", "Cancelling …")
+            cancellation.cancel(); onlineTask?.cancel(); status.text = text("Wird abgebrochen …", "Cancelling …")
             return // wait for I/O/rollback before allowing another operation
         }
         closed = true; dismiss(animated: true)
@@ -116,7 +146,20 @@ final class CommanderToolsController: UIViewController, UITableViewDataSource, U
         guard !busy else { return }
         view.endEditing(true); invalidatePlan(); cancellation.reset(); rows = []; table.reloadData()
         let query = (fields[0].text ?? "*").precomposedStringWithCanonicalMapping
+        let caseSensitive = caseSensitiveButton.isSelected
         guard mode != .search || !query.isEmpty else { status.text = text("Bitte Suchmuster eingeben.", "Enter a search pattern."); return }
+        if let onlineRun {
+            let path = searchPath.text ?? root.path, values = fields.map { $0.text ?? "" }
+            setBusy(true)
+            onlineTask = Task { @MainActor in
+                do {
+                    self.rows = try await onlineRun(query, caseSensitive, path, values)
+                    self.setBusy(false); self.table.reloadData()
+                    self.status.text = "\(self.rows.count) " + self.text("Einträge", "entries")
+                } catch { self.failed(error) }
+            }
+            return
+        }
         let searchRoot: URL
         if mode == .search {
             guard let directory = CommanderTools.searchDirectory(searchPath.text ?? "") else {
@@ -132,7 +175,8 @@ final class CommanderToolsController: UIViewController, UITableViewDataSource, U
                 var rows: [Row] = []; var warnings: [String] = []; var plan: [CommanderTools.Rename] = []
                 switch self.mode {
                 case .search:
-                    let result = try CommanderTools.search(searchRoot, query: query, hidden: self.hidden, cancel: self.cancellation)
+                    let result = try CommanderTools.search(searchRoot, query: query, hidden: self.hidden,
+                                                           caseSensitive: caseSensitive, cancel: self.cancellation)
                     rows = result.urls.map { Row(title: $0.lastPathComponent, detail: $0.path, url: $0) }; warnings = result.warnings
                 case .compare:
                     let result = try CommanderTools.compare(self.root, self.other, hidden: self.hidden, cancel: self.cancellation)
@@ -160,6 +204,16 @@ final class CommanderToolsController: UIViewController, UITableViewDataSource, U
         }
     }
     @objc private func apply() {
+        if let onlineApply, !busy, !rows.isEmpty {
+            rows = []; table.reloadData(); setBusy(true)
+            onlineTask = Task { @MainActor in
+                do {
+                    let count = try await onlineApply()
+                    self.setBusy(false); self.status.text = "\(count) " + self.text("umbenannt. Rückgängig über den Hauptknopf.", "renamed. Undo using the main button.")
+                } catch { self.failed(error) }
+            }
+            return
+        }
         guard !busy, !plan.isEmpty else { return }
         let plan = self.plan; self.plan = []; cancellation.reset(); setBusy(true)
         DispatchQueue.global(qos: .userInitiated).async {
@@ -174,8 +228,9 @@ final class CommanderToolsController: UIViewController, UITableViewDataSource, U
     }
     private func failed(_ error: Error) {
         DispatchQueue.main.async {
-            self.plan = []; self.setBusy(false)
-            self.status.text = "⚠ " + (self.mode == .search ? HistoryFailure(error).message : error.localizedDescription)
+            self.plan = []; self.rows = []; self.table.reloadData(); self.setBusy(false)
+            let ns = error as NSError
+            self.status.text = "⚠ " + (error is CancellationError ? self.text("Abgebrochen. Abgeschlossene Schritte bleiben erhalten.", "Cancelled. Completed steps remain.") : ns.domain == "OpenCommander.Remote" ? L10n.get(ns.localizedDescription) : HistoryFailure(error).message)
         }
     }
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { rows.count }

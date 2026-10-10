@@ -13,7 +13,7 @@ Diese Datei enthaelt die konkreten Eingaben fuer die Play Console fuer den aktue
 - Preis: Kostenlos
 - Enthaltene Werbung: Nein
 - Open Source: Ja
-- Repository: https://github.com/Niclas85/openComander
+- Repository: https://github.com/Niclas85/OpenCommander
 - Kontakt-E-Mail: info@opengames.vip
 
 ## Store Listing

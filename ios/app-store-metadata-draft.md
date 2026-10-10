@@ -10,7 +10,7 @@ Status: Technically verified draft. Contact, privacy-policy URL, age rating, tra
 - Version: 1.0
 - Copyright: Account holder must confirm
 - Price: Account holder must confirm (the existing product description says free)
-- Support URL: `https://github.com/Niclas85/openComander`
+- Support URL: `https://github.com/Niclas85/OpenCommander`
 - Privacy-policy URL: blocked until the completed policy is publicly hosted
 
 ## German (de-DE)

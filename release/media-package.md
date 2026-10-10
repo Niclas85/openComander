@@ -6,7 +6,8 @@ Stand: 19. Juni 2026
 
 Store-ready cleaned copies:
 
-- `playstore/final-clean/app-icon-512.png`
+- `playstore/icon/google-play-current-512.png` (current Google Play/Android icon;
+  see `playstore/icon/README.md`)
 - `playstore/final-clean/feature-graphic-1024x500.png`
 - `playstore/final-clean/phone-01.png`
 - `playstore/final-clean/phone-02.png`

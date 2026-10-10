@@ -1,6 +1,6 @@
 import re
 
-with open("/Users/niklaus/Documents/openComander/ios/OpenCommander/ViewController.swift", "r") as f:
+with open("/Users/niklaus/Documents/OpenCommander/ios/OpenCommander/ViewController.swift", "r") as f:
     content = f.read()
 
 # Patch executeDeleteOperation
@@ -115,5 +115,5 @@ new_run = """        DispatchQueue.global(qos: .userInitiated).async {
 
 content = content.replace(old_run, new_run)
 
-with open("/Users/niklaus/Documents/openComander/ios/OpenCommander/ViewController.swift", "w") as f:
+with open("/Users/niklaus/Documents/OpenCommander/ios/OpenCommander/ViewController.swift", "w") as f:
     f.write(content)

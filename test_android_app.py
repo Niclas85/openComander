@@ -9,7 +9,7 @@ options = AppiumOptions()
 options.load_capabilities({
     "platformName": "Android",
     "automationName": "UiAutomator2",
-    "app": "/Users/niklaus/Documents/openComander/app/build/outputs/apk/debug/app-debug.apk",
+    "app": "/Users/niklaus/Documents/OpenCommander/app/build/outputs/apk/debug/app-debug.apk",
     "noReset": False
 })
 

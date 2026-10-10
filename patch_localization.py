@@ -1,6 +1,6 @@
 import re
 
-with open("/Users/niklaus/Documents/openComander/ios/OpenCommander/ViewController.swift", "r") as f:
+with open("/Users/niklaus/Documents/OpenCommander/ios/OpenCommander/ViewController.swift", "r") as f:
     content = f.read()
 
 # Replace static button texts with L10n.get(...)
@@ -88,5 +88,5 @@ new_lang = """    @objc func showLanguageDialog() {
     }"""
 content = content.replace(old_lang, new_lang)
 
-with open("/Users/niklaus/Documents/openComander/ios/OpenCommander/ViewController.swift", "w") as f:
+with open("/Users/niklaus/Documents/OpenCommander/ios/OpenCommander/ViewController.swift", "w") as f:
     f.write(content)

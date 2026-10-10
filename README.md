@@ -44,7 +44,7 @@ OpenCommander ist ein lokaler Dateimanager fuer Android, iOS, macOS und Linux im
 
 ## Repository
 
-Quellcode: https://github.com/Niclas85/openComander
+Quellcode: https://github.com/Niclas85/OpenCommander
 
 ## Rechtliches
 
@@ -117,6 +117,10 @@ Installationshinweise, Tests und Unterschiede zur Mac-Version stehen in
 Details zu Änderungen und Prüfungen stehen im [Linux-Änderungsprotokoll](linux/CHANGELOG.md).
 
 ### macOS
+
+Neu im Mac-Ausbau: **Werkzeuge** mit rekursiver Dateisuche, Ordner-Inhaltsvergleich
+und Mehrfach-Umbenennen mit Vorschau. Bedienung, Sicherheitsgrenzen und noch offene
+Commander-Funktionen stehen in [docs/commander-tools.md](docs/commander-tools.md).
 
 Die Swift-App unter `ios/` wird zugleich als native Mac-Catalyst-App gebaut. Sie enthaelt die bestehenden Commander-Funktionen und zusaetzlich Mac-Tastaturbefehle:
 

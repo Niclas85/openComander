@@ -451,6 +451,9 @@ private final class DesktopLocationSettingsViewController: UITableViewController
             return
         }
         let entry = entries[indexPath.row]
+        if let remote = RemoteConnection.load().first(where: { $0.locationPath == entry.path }) {
+            editRemote(remote); return
+        }
         let alert = UIAlertController(title: L10n.get("location_rename"), message: entry.path, preferredStyle: .alert)
         alert.addTextField { $0.text = entry.name }
         alert.addAction(UIAlertAction(title: L10n.get("settings_save"), style: .default) { [weak self] _ in
@@ -467,6 +470,123 @@ private final class DesktopLocationSettingsViewController: UITableViewController
         present(alert, animated: true)
     }
     @objc private func addLocation() {
+        let menu = UIAlertController(title: L10n.get("location_add"), message: nil, preferredStyle: .actionSheet)
+        menu.addAction(UIAlertAction(title: L10n.get("choose_folder"), style: .default) { [weak self] _ in self?.addFolder() })
+        for scheme in ["ftps", "sftp", "ftp"] {
+            menu.addAction(UIAlertAction(title: scheme == "sftp" ? "SSH – SFTP (SCP)" : scheme.uppercased(), style: .default) { [weak self] _ in
+                self?.editRemote(RemoteConnection(name: "", scheme: scheme, host: "", port: scheme == "sftp" ? 22 : 21,
+                    user: "", root: "/", keyPath: ""))
+            })
+        }
+        menu.addAction(UIAlertAction(title: L10n.get("remote_ssh_password"), style: .default) { [weak self] _ in
+            self?.editRemote(RemoteConnection(name: "", scheme: "sftp", host: "", port: 22,
+                user: "", root: "/", keyPath: "", passwordAuthentication: true))
+        })
+        menu.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel))
+        menu.popoverPresentationController?.barButtonItem = navigationItem.rightBarButtonItem
+        present(menu, animated: true)
+    }
+    private func editRemote(_ connection: RemoteConnection) {
+        let alert = UIAlertController(title: connection.scheme == "sftp" ? (connection.passwordAuthentication == true ? L10n.get("remote_ssh_password") : "SSH – SFTP (SCP)") : connection.scheme.uppercased(),
+            message: L10n.get(connection.scheme == "sftp" ? "remote_ssh_help" : connection.scheme == "ftp" ? "remote_ftp_help" : "remote_ftps_help"), preferredStyle: .alert)
+        let keyAuthentication = connection.scheme == "sftp" && connection.passwordAuthentication != true
+        var values = [connection.name, connection.host, String(connection.port), connection.user, connection.root,
+                      keyAuthentication ? connection.keyPath : ""]
+        var keys = ["remote_name", "remote_host", "remote_port", "remote_user", "remote_root",
+                    keyAuthentication ? "remote_key" : "remote_password"]
+        if connection.scheme == "ftps" { values.append(connection.tlsCAPath ?? ""); keys.append("remote_tls_ca") }
+        for index in values.indices {
+            alert.addTextField { field in
+                field.text = values[index]; field.placeholder = L10n.get(keys[index])
+                field.accessibilityLabel = L10n.get(keys[index]); field.accessibilityIdentifier = "RemoteConnectionField-\(index)"
+                field.autocorrectionType = .no; field.autocapitalizationType = .none
+                field.isSecureTextEntry = index == 5 && !keyAuthentication
+            }
+        }
+        func configured(_ fields: [UITextField]) -> RemoteConnection {
+            var remote = connection
+            remote.name = fields[0].text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            remote.host = fields[1].text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            remote.port = Int(fields[2].text ?? "") ?? 0; remote.user = fields[3].text ?? ""
+            let root = fields[4].text ?? "/"
+            remote.root = root == "/" ? "/" : root.hasSuffix("/") ? String(root.dropLast()) : root
+            if keyAuthentication { remote.keyPath = ((fields[5].text ?? "") as NSString).expandingTildeInPath }
+            if remote.scheme == "ftps" {
+                let ca = ((fields[6].text ?? "") as NSString).expandingTildeInPath
+                remote.tlsCAPath = ca.isEmpty ? nil : ca
+            }
+            if remote.host != connection.host || remote.port != connection.port { remote.trustedHostKeys = nil }
+            return remote
+        }
+        alert.addAction(UIAlertAction(title: L10n.get("settings_save"), style: .default) { [weak self, weak alert] _ in
+            guard let self, let fields = alert?.textFields else { return }
+            do {
+                try self.saveRemote(configured(fields), password: fields[5].text)
+            } catch {
+                DispatchQueue.main.async {
+                    let errorAlert = UIAlertController(title: L10n.get("remote_invalid"), message: nil, preferredStyle: .alert)
+                    errorAlert.addAction(UIAlertAction(title: "OK", style: .default)); self.present(errorAlert, animated: true)
+                }
+            }
+        })
+        if connection.scheme == "sftp" {
+            alert.addAction(UIAlertAction(title: L10n.get("remote_check_host"), style: .default) { [weak self, weak alert] _ in
+                guard let self, let fields = alert?.textFields, let bridge = DesktopBridge.shared else { return }
+                let remote = configured(fields)
+                do {
+                    try remote.validate()
+                    bridge.remoteHostKeys(try JSONEncoder().encode(remote)) { [weak self] keys, error in
+                        guard let self else { return }
+                        guard let keys, let fingerprints = try? RemoteConnection.fingerprints(keys), error == nil else {
+                            let failure = UIAlertController(title: L10n.get("remote_ssh_failed"), message: nil, preferredStyle: .alert)
+                            failure.addAction(UIAlertAction(title: "OK", style: .default)); self.present(failure, animated: true); return
+                        }
+                        let trust = UIAlertController(title: L10n.get("remote_check_host"),
+                            message: remote.host + ":\(remote.port)\n\n" + fingerprints + "\n\n" + L10n.get("remote_trust_help"), preferredStyle: .alert)
+                        trust.addAction(UIAlertAction(title: L10n.get("remote_trust_save"), style: .default) { [weak self] _ in
+                            var trusted = remote; trusted.trustedHostKeys = keys
+                            do { try self?.saveRemote(trusted, password: keyAuthentication ? nil : fields[5].text) }
+                            catch { self?.tableView.reloadData() }
+                        })
+                        trust.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel))
+                        self.present(trust, animated: true)
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        let failure = UIAlertController(title: L10n.get("remote_invalid"), message: nil, preferredStyle: .alert)
+                        failure.addAction(UIAlertAction(title: "OK", style: .default)); self.present(failure, animated: true)
+                    }
+                }
+            })
+        }
+        if entries.contains(where: { $0.path == connection.locationPath }) {
+            alert.addAction(UIAlertAction(title: L10n.get("location_remove"), style: .destructive) { [weak self] _ in
+                guard let self else { return }
+                do {
+                    try OneDriveKeychain().write(nil, clientID: "remote:" + connection.id)
+                    try RemoteConnection.save(RemoteConnection.load().filter { $0.id != connection.id })
+                    self.entries.removeAll { $0.path == connection.locationPath }; self.save()
+                } catch { self.tableView.reloadData() }
+            })
+        }
+        alert.addAction(UIAlertAction(title: L10n.get("cancel"), style: .cancel))
+        present(alert, animated: true)
+    }
+    private func saveRemote(_ remote: RemoteConnection, password: String?) throws {
+        try remote.validate()
+        if (remote.scheme != "sftp" || remote.passwordAuthentication == true), let password, !password.isEmpty {
+            guard !password.contains("\0"), remote.scheme != "sftp" || (!password.contains("\n") && !password.contains("\r") && password.utf8.count <= 8192) else { throw RemoteConnection.failure("remote_invalid") }
+            try OneDriveKeychain().write(password, clientID: "remote:" + remote.id)
+        }
+        var profiles = RemoteConnection.load(); profiles.removeAll { $0.id == remote.id }; profiles.append(remote)
+        try RemoteConnection.save(profiles)
+        let old = entries.first { $0.path == remote.locationPath }
+        entries.removeAll { $0.path == remote.locationPath }
+        entries.append(DesktopLocationPreference(path: remote.locationPath, name: remote.name, enabled: old?.enabled ?? true, custom: true,
+            visibilityConfigured: old?.visibilityConfigured))
+        locationDetails[remote.locationPath] = remote.displayAddress; save()
+    }
+    private func addFolder() {
         chooseFolder { [weak self] url in
             guard let self, let url else { return }
             let scope = url.startAccessingSecurityScopedResource()
@@ -1312,6 +1432,7 @@ private extension ViewController {
         var addedPaths = Set<String>()
         let preferences = DesktopLocationPreferences.load()
         for entry in preferences where entry.custom && entry.enabled {
+            if entry.path.hasPrefix("remote://") { continue }
             var url = URL(fileURLWithPath: entry.path, isDirectory: true)
             if let bookmark = entry.bookmark {
                 var stale = false
@@ -1327,6 +1448,15 @@ private extension ViewController {
         connections.accessibilityIdentifier = "DesktopAction-connections"
         connections.addTarget(self, action: #selector(showConnections), for: .touchUpInside)
         stack.addArrangedSubview(connections)
+        for remote in RemoteConnection.load() {
+            let preference = preferences.first { $0.path == remote.locationPath }
+            guard preference?.enabled != false else { continue }
+            let button = miniButton(label: preference?.name ?? remote.name)
+            button.accessibilityIdentifier = "Location-\(remote.locationPath)"
+            button.accessibilityLabel = remote.scheme.uppercased() + ": " + (preference?.name ?? remote.name)
+            button.addAction(UIAction { [weak self] _ in self?.openRemoteConnection(remote) }, for: .touchUpInside)
+            stack.addArrangedSubview(button)
+        }
         let onlinePreference = preferences.first { $0.path == DesktopLocationPreferences.oneDriveOnlinePath }
         if onlinePreference?.enabled != false {
             let online = miniButton(label: onlinePreference?.name ?? "OneDrive online")
@@ -1701,6 +1831,13 @@ extension ViewController {
         progressBar.progress = Float(max(0, min(100, progress))) / 100
     }
 
+    func updateTransferProgress(_ message: String, progress: Int) {
+        updateProgress(progress: progress)
+        progressActivity.startAnimating() // current item can still be waiting on a provider
+        progressText.text = message
+        updateGlobalStatus(message)
+    }
+
     func finishProgress(_ message: String) {
         progressActivity.stopAnimating()
         operationReadCoordinator = nil
@@ -1860,8 +1997,16 @@ extension ViewController {
     private func showCommanderTool(_ mode: CommanderToolsController.Mode) {
         guard !operationInProgress, let pane = activePane else { return }
 #if targetEnvironment(macCatalyst)
-        guard pane.onlineBrowser == nil, mode != .compare || (leftPane.onlineBrowser == nil && rightPane.onlineBrowser == nil) else {
-            updateGlobalStatus(L10n.get("commander_local_only")); return
+        if let browser = pane.onlineBrowser ?? (mode == .compare ? (leftPane.onlineBrowser ?? rightPane.onlineBrowser) : nil) {
+            guard let controller = browser.commanderTool(mode, left: leftPane.onlineBrowser, right: rightPane.onlineBrowser,
+                leftURL: leftPane.currentDirectory.url, rightURL: rightPane.currentDirectory.url) else {
+                updateGlobalStatus(L10n.get("commander_select")); return
+            }
+            controller.overrideUserInterfaceStyle = darkMode ? .dark : .light
+            controller.modalPresentationStyle = .formSheet; controller.preferredContentSize = CGSize(width: 940, height: 720)
+            if let presented = presentedViewController { presented.dismiss(animated: false) { self.present(controller, animated: true) } }
+            else { present(controller, animated: true) }
+            return
         }
 #endif
         guard pane.currentDirectory.isPhysical(), mode != .compare || (leftPane.currentDirectory.isPhysical() && rightPane.currentDirectory.isPhysical()) else {
@@ -2530,6 +2675,7 @@ extension ViewController {
         sections.append(L10n.get("help_access_macos"))
         sections.append(L10n.get("help_open_macos"))
         sections.append(L10n.get("help_cloud_macos"))
+        sections.append(L10n.get("help_remote_macos"))
         sections.append(L10n.get("help_desktop_parity"))
         sections.append(L10n.get("commander_help"))
         sections.append(macKeyboardShortcutsHelp())
@@ -2665,7 +2811,7 @@ extension ViewController {
                 case .copy(let files): title = String(format: L10n.get("copied_items"), files.count)
                 case .zip(let record): title = String(format: L10n.get("zip_created"), record.destination.lastPathComponent)
                 case .rename(let record): title = String(format: L10n.get("renamed_item"), record.destination.lastPathComponent)
-                case .cloud(let record): title = "OneDrive online · " + record.action
+                case .cloud(let record): title = record.action
                 }
                 let records: [FileUndoRecord]
                 switch op {
@@ -2981,6 +3127,7 @@ extension ViewController: UIDocumentPickerDelegate {
                 entries.insert(DesktopLocationPreference(path: onlinePath, name: "OneDrive online", enabled: true, custom: false), at: 0)
             }
             details[onlinePath] = L10n.get("onedrive_online_location_help")
+            for remote in RemoteConnection.load() { details[remote.locationPath] = remote.displayAddress }
             for entry in entries where !entry.custom && entry.path != onlinePath && details[entry.path] == nil {
                 details[entry.path] = "\(L10n.get("location_disconnected"))\n\(entry.path)"
             }
@@ -3017,11 +3164,17 @@ extension ViewController: UIDocumentPickerDelegate {
     }
 
     func openOneDriveOnline() {
+        openOnlineBrowser(remote: nil)
+    }
+    func openRemoteConnection(_ remote: RemoteConnection) {
+        openOnlineBrowser(remote: remote)
+    }
+    private func openOnlineBrowser(remote: RemoteConnection?) {
         guard !operationInProgress, presentedViewController == nil else { return }
         guard let pane = activePane ?? leftPane else { return }
         activePane = pane
-        if pane.onlineNavigation != nil { return }
-        let browser = OneDriveBrowser()
+        if pane.onlineNavigation != nil { pane.closeOnline() }
+        let browser = OneDriveBrowser(remote: remote)
         browser.commander = self
         browser.paneTitle = pane.title
         browser.onStateChanged = { [weak self] in self?.updateDesktopActions() }
@@ -3041,7 +3194,7 @@ extension ViewController: UIDocumentPickerDelegate {
         pane.showOnline(navigation)
         navigation.didMove(toParent: self)
         updateDesktopActions()
-        updateGlobalStatus("OneDrive online")
+        updateGlobalStatus(remote?.name ?? "OneDrive online")
     }
 
     @objc func showConnections() {

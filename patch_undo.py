@@ -1,6 +1,6 @@
 import re
 
-with open("/Users/niklaus/Documents/openComander/ios/OpenCommander/ViewController.swift", "r") as f:
+with open("/Users/niklaus/Documents/OpenCommander/ios/OpenCommander/ViewController.swift", "r") as f:
     content = f.read()
 
 # Add OperationType enum and operationHistory var
@@ -68,5 +68,5 @@ content = content.replace(old_undo, new_undo)
 rename_regex = r"(try fm\.moveItem\(at: url, to: newUrl\))"
 content = re.sub(rename_regex, r"\1\n                self.operationHistory.append(.rename(originalUrl: url, newUrl: newUrl))", content)
 
-with open("/Users/niklaus/Documents/openComander/ios/OpenCommander/ViewController.swift", "w") as f:
+with open("/Users/niklaus/Documents/OpenCommander/ios/OpenCommander/ViewController.swift", "w") as f:
     f.write(content)

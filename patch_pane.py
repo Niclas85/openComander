@@ -1,6 +1,6 @@
 import re
 
-with open("/Users/niklaus/Documents/openComander/ios/OpenCommander/Pane.swift", "r") as f:
+with open("/Users/niklaus/Documents/OpenCommander/ios/OpenCommander/Pane.swift", "r") as f:
     content = f.read()
 
 func_code = """
@@ -15,5 +15,5 @@ func_code = """
 
 content = content.replace("func openDirectory(_ directory: FileEntry) {", func_code + "\n    func openDirectory(_ directory: FileEntry) {")
 
-with open("/Users/niklaus/Documents/openComander/ios/OpenCommander/Pane.swift", "w") as f:
+with open("/Users/niklaus/Documents/OpenCommander/ios/OpenCommander/Pane.swift", "w") as f:
     f.write(content)

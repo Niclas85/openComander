@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        C08020261008000000000001 = {isa = PBXBuildFile; fileRef = C08020261008000000000011; };
+        C08020261008000000000002 = {isa = PBXBuildFile; fileRef = C08020261008000000000011; };
+        C08020261008000000000003 = {isa = PBXBuildFile; fileRef = C08020261008000000000012; };
 		C07020261007000000000002 /* CommanderToolsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C07020261007000000000012 /* CommanderToolsController.swift */; };
 		C07020261007000000000001 /* CommanderTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = C07020261007000000000011 /* CommanderTools.swift */; };
         0D0420261004000000000001 /* OneDriveClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D0420261004000000000002; };
@@ -87,6 +90,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        C08020261008000000000011 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteConnection.swift; sourceTree = "<group>"; };
+        C08020261008000000000012 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteFileClient.swift; sourceTree = "<group>"; };
 		C07020261007000000000012 /* CommanderToolsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommanderToolsController.swift; sourceTree = "<group>"; };
 		C07020261007000000000011 /* CommanderTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommanderTools.swift; sourceTree = "<group>"; };
         0D0420261004000000000002 /* OneDriveClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveClient.swift; sourceTree = "<group>"; };
@@ -170,6 +175,8 @@
 			isa = PBXGroup;
 			children = (
                 0D0420261004000000000002 /* OneDriveClient.swift */,
+                C08020261008000000000011,
+                C08020261008000000000012,
                 0D0420261004000000000004 /* OneDriveBrowser.swift */,
 				4446BB5DED9CF5F765ACB678 /* AppDelegate.swift */,
                 A66000000000000000000011,
@@ -303,6 +310,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = E00DBB1612B94F9E4DD9E3D7 /* Build configuration list for PBXNativeTarget "OpenCommander" */;
 			buildPhases = (
+                C08020261008000000000020 /* Build SSH password helper */,
 				664B47E5B1BD4453AB12B48C /* Sources */,
 				AE61A00DE1C9FF2C2478036D /* Resources */,
 				65487D88ADE12A608EDA02F3 /* Frameworks */,
@@ -398,6 +406,12 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+        C08020261008000000000020 /* Build SSH password helper */ = {
+            isa = PBXShellScriptBuildPhase; alwaysOutOfDate = 1; buildActionMask = 2147483647;
+            files = (); inputPaths = ("$(SRCROOT)/OpenCommanderMacBridge/SSHAskPass.c", "$(SRCROOT)/build-ssh-askpass.sh");
+            outputPaths = (); name = "Build SSH password helper"; runOnlyForDeploymentPostprocessing = 0;
+            shellPath = /bin/sh; shellScript = "sh \"$SRCROOT/build-ssh-askpass.sh\"\n";
+        };
 		C0DE00000000000000000020 /* Build NTFS-3G engine */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -412,7 +426,7 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-        A66000000000000000000031 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A66000000000000000000002, A66000000000000000000003); runOnlyForDeploymentPostprocessing = 0; };
+        A66000000000000000000031 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A66000000000000000000002, A66000000000000000000003, C08020261008000000000002); runOnlyForDeploymentPostprocessing = 0; };
 		2D748C0EB7CAA662C857EF35 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -438,6 +452,8 @@
 			buildActionMask = 2147483647;
 			files = (
                 0D0420261004000000000001 /* OneDriveClient.swift in Sources */,
+                C08020261008000000000001,
+                C08020261008000000000003,
                 0D0420261004000000000003 /* OneDriveBrowser.swift in Sources */,
 				D78142BF3E7FB6427ADC9A63 /* AppDelegate.swift in Sources */,
 				510EFA53657E909B5C734B36 /* FileEntry.swift in Sources */,

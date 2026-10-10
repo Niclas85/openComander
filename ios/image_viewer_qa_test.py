@@ -15,7 +15,7 @@ BUNDLE = "com.github.niklaus85.OpenCommander"
 DEVICE = os.environ.get("IOS_UDID", "00008030-000E54823A91402E")
 EVIDENCE = Path(os.environ.get(
     "QA_EVIDENCE",
-    "/Users/niklaus/Documents/openComander/parity-evidence/image-viewer",
+    "/Users/niklaus/Documents/OpenCommander/parity-evidence/image-viewer",
 ))
 FIXTURES = Path(os.environ.get("QA_FIXTURES", "/tmp/opencommander-image-qa"))
 

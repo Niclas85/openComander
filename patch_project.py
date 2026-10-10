@@ -1,6 +1,6 @@
 import re
 
-with open("/Users/niklaus/Documents/openComander/ios/project.yml", "r") as f:
+with open("/Users/niklaus/Documents/OpenCommander/ios/project.yml", "r") as f:
     content = f.read()
 
 packages_block = """packages:
@@ -18,5 +18,5 @@ if "dependencies:" not in content:
         "    dependencies:\n      - package: ZIPFoundation\n    sources:\n      - path: OpenCommander"
     )
 
-with open("/Users/niklaus/Documents/openComander/ios/project.yml", "w") as f:
+with open("/Users/niklaus/Documents/OpenCommander/ios/project.yml", "w") as f:
     f.write(content)

@@ -29,11 +29,13 @@ private final class OneDriveCell: UITableViewCell {
     private let pathLabel = UILabel()
     private let countLabel = UILabel()
     private let loadingIndicator = UIActivityIndicatorView(style: .medium)
+    private let remoteProfile: RemoteConnection?
+    private var locationTitle: String { remoteProfile?.name ?? "OneDrive online" }
     private func onlineLocation(_ name: String? = nil) -> String {
-        "OneDrive online:/" + (folders.map(\.name) + (name.map { [$0] } ?? [])).joined(separator: "/")
+        locationTitle + ":/" + (folders.map(\.name) + (name.map { [$0] } ?? [])).joined(separator: "/")
     }
     private func destinationLocation(_ parent: String?, name: String) async throws -> String {
-        guard let client else { return "OneDrive online:/" + name }
+        guard let client else { return locationTitle + ":/" + name }
         var components = [name], cursor = parent, seen = Set<String>()
         while let id = cursor {
             guard seen.insert(id).inserted, seen.count <= 100 else { throw OneDriveFailure.message("Invalid OneDrive folder hierarchy.") }
@@ -42,7 +44,7 @@ private final class OneDriveCell: UITableViewCell {
             components.insert(item.name, at: 0)
             cursor = item.parentReference?.id
         }
-        return "OneDrive online:/" + components.joined(separator: "/")
+        return locationTitle + ":/" + components.joined(separator: "/")
     }
     private func record(_ action: String, source: String, destination: String) {
         commander?.operationHistory.append(.cloud(record: CloudOperationRecord(action: action, source: source, destination: destination)))
@@ -129,18 +131,91 @@ private final class OneDriveCell: UITableViewCell {
     var currentParentID: String? { folders.last?.id }
     private var selectedItems: [OneDriveItem] { visibleItems.filter { selectedIDs.contains($0.id) } }
     var selection: OneDriveSelection { OneDriveSelection(browser: self, items: selectedItems, generation: generation) }
+    func commanderTool(_ mode: CommanderToolsController.Mode, left: OneDriveBrowser?, right: OneDriveBrowser?, leftURL: URL, rightURL: URL) -> CommanderToolsController? {
+        guard !busy, left?.busy != true, right?.busy != true, let client, mode != .rename || !selectedItems.isEmpty else { return nil }
+        let initialFolders = folders, selected = selectedItems
+        let base = remoteProfile?.root ?? "/"
+        let path = (base == "/" ? "" : base) + "/" + folders.map(\.name).joined(separator: "/")
+        let hidden = UserDefaults.standard.bool(forKey: "show_hidden_files")
+        let controller = CommanderToolsController(mode: mode, root: URL(fileURLWithPath: path), other: rightURL, selected: [], hidden: hidden)
+        controller.displayRoot = mode == .compare ? (left?.onlineLocation() ?? leftURL.path) : onlineLocation()
+        controller.displayOther = right?.onlineLocation() ?? rightURL.path
+        var renamePlan: [CommanderOnlineTools.Rename] = []
+        var results: [String: CommanderOnlineTools.Entry] = [:]
+        controller.onlineRun = { [weak self, weak controller] query, matchCase, searchPath, fields in
+            guard let self else { throw CancellationError() }
+            self.busy = true; self.updateNavigation()
+            defer { self.busy = false; self.updateNavigation() }
+            switch mode {
+            case .search:
+                guard base == "/" || searchPath == base || searchPath.hasPrefix(base + "/") else { throw RemoteConnection.failure("remote_invalid") }
+                let relative = base == "/" ? searchPath : String(searchPath.dropFirst(base.count))
+                let parents = try await CommanderOnlineTools.resolve(relative.isEmpty ? "/" : relative, client: client)
+                let entries = try await CommanderOnlineTools.scan(client, ancestors: parents, hidden: hidden) { count in
+                    controller?.report("\(count) " + self.text("Einträge geprüft …", "entries checked …"))
+                }
+                results = [:]
+                return try entries.filter { try CommanderOnlineTools.matches($0.item.name, query: query, caseSensitive: matchCase) }.map { entry in
+                    let url = URL(string: "opencommander-online://result/" + UUID().uuidString)!
+                    results[url.absoluteString] = entry
+                    let fullPath = (base == "/" ? "" : base) + "/" + (entry.ancestors.map(\.name) + [entry.item.name]).joined(separator: "/")
+                    return .init(title: entry.item.name, detail: self.locationTitle + ":" + fullPath, url: url)
+                }
+            case .compare:
+                @MainActor func content(_ browser: OneDriveBrowser?, _ local: URL) async throws -> [String: String] {
+                    if let browser, let service = browser.client {
+                        return try await CommanderOnlineTools.content(service, ancestors: browser.folders, hidden: hidden) { done, total in
+                            controller?.report(browser.locationTitle + ": \(done)/\(total)")
+                        }
+                    }
+                    var snapshot = try await RemoteContent.snapshotAsync(local, hidden: hidden); snapshot.removeValue(forKey: "")
+                    return snapshot
+                }
+                let a = try await content(left, leftURL), b = try await content(right, rightURL)
+                return Set(a.keys).union(b.keys).sorted().compactMap { path in
+                    if a[path] == "directory" && b[path] == "directory" { return nil }
+                    let label = a[path] == nil ? self.text("Nur rechts", "Right only") : b[path] == nil ? self.text("Nur links", "Left only") : a[path] == b[path] ? self.text("Gleich", "Equal") : self.text("Unterschiedlich", "Different")
+                    return .init(title: label + " · " + path, detail: "", url: nil)
+                }
+            case .rename:
+                renamePlan = try await CommanderOnlineTools.renamePlan(client, parent: initialFolders.last?.id, selected: selected, fields: fields)
+                return renamePlan.map { .init(title: $0.item.name + " → " + $0.name, detail: self.onlineLocation(), url: nil) }
+            }
+        }
+        if mode == .rename {
+            controller.onlineApply = { [weak self] in
+                guard let self else { throw CancellationError() }
+                let plan = renamePlan; renamePlan = []
+                self.busy = true; self.updateNavigation()
+                defer {
+                    self.busy = false; self.treeChildren = [:]; self.updateNavigation()
+                    Task { try? await self.load() }
+                }
+                return try await CommanderOnlineTools.rename(client, plan: plan) { row in
+                    self.record(L10n.get("rename"), source: self.onlineLocation(row.item.name), destination: self.onlineLocation(row.name))
+                    if let renamed = try? await client.metadata(row.item.id) { self.undoHistory.append(.rename(renamed, row.item.name)) }
+                }
+            }
+        }
+        controller.onOpen = { [weak self] url in
+            guard let self, let entry = results[url.absoluteString] else { return }
+            self.navigate(entry.item.isFolder ? entry.ancestors + [entry.item] : entry.ancestors)
+        }
+        return controller
+    }
     func selectAllOnline() { selectedIDs = Set(visibleItems.map(\.id)); tableView.reloadData(); updateNavigation(); onStateChanged?() }
     func renameOnlineSelection() { if let item = selectedItems.first, selectedItems.count == 1, !busy { namePrompt(item: item) } }
     func deleteOnlineSelection() {
         let selected = selectedItems
         guard !selected.isEmpty, !busy else { return }
-        let alert = UIAlertController(title: L10n.get("move_to_trash"), message: selected.map(\.name).joined(separator: "\n"), preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: L10n.get("move_to_trash"), style: .destructive) { [weak self] _ in
+        let deleteTitle = remoteProfile == nil ? L10n.get("move_to_trash") : L10n.get("remote_delete")
+        let alert = UIAlertController(title: deleteTitle, message: selected.map(\.name).joined(separator: "\n"), preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: deleteTitle, style: .destructive) { [weak self] _ in
             self?.run(transfer: true) { [weak self] in
                 guard let self, let client = self.client else { return }
                 for item in selected {
                     try Task.checkCancellation(); try await client.recycle(item)
-                    self.record(L10n.get("move_to_trash"), source: self.onlineLocation(item.name), destination: "OneDrive Papierkorb / Recycle bin")
+                    self.record(deleteTitle, source: self.onlineLocation(item.name), destination: self.remoteProfile == nil ? "OneDrive Papierkorb / Recycle bin" : L10n.get("remote_deleted"))
                 }
                 try await self.load()
             }
@@ -260,8 +335,8 @@ private final class OneDriveCell: UITableViewCell {
             let size = item.size.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "—"
             let message = String(format: L10n.get("file_info_message"), item.name,
                 L10n.get(item.isFolder ? "folder" : "file"),
-                "OneDrive online:/" + (self.folders.map(\.name) + [item.name]).joined(separator: "/"),
-                size, "—", item.lastModifiedDateTime ?? "—", self.text("Durch OneDrive verwaltet", "Managed by OneDrive"))
+                self.onlineLocation(item.name),
+                size, "—", item.lastModifiedDateTime ?? "—", self.remoteProfile?.scheme.uppercased() ?? self.text("Durch OneDrive verwaltet", "Managed by OneDrive"))
             self.commander?.showScrollableDialog(title: L10n.get("file_info"), message: message)
         }
     }
@@ -315,7 +390,7 @@ private final class OneDriveCell: UITableViewCell {
         guard UIPasteboard.general.contains(pasteboardTypes: ["com.opencommander.onedrive-selection"]) else { clipboard = nil; return nil }
         return clipboard
     }
-    private var client: OneDriveClient?
+    private var client: (any CommanderOnlineClient)?
     var paneTitle = "1"
     var onClose: (() -> Void)?
     var onActivate: (() -> Void)?
@@ -340,11 +415,11 @@ private final class OneDriveCell: UITableViewCell {
     private let clientIDKey = "OneDriveApplicationClientID"
     private var german: Bool { (UserDefaults.standard.string(forKey: "language") ?? Locale.current.language.languageCode?.identifier ?? "en").hasPrefix("de") }
     private func text(_ de: String, _ en: String) -> String { german ? de : en }
-    init() { super.init(nibName: nil, bundle: nil) }
+    init(remote: RemoteConnection? = nil) { remoteProfile = remote; super.init(nibName: nil, bundle: nil) }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "OneDrive online"
+        title = locationTitle
         isModalInPresentation = true
         buildCommanderLayout()
         tableView.accessibilityIdentifier = "OneDriveOnlineFiles"
@@ -358,6 +433,10 @@ private final class OneDriveCell: UITableViewCell {
         refreshControl?.addTarget(self, action: #selector(reload), for: .valueChanged)
         tableView.refreshControl = refreshControl
         for list in [tableView, treeView] { list.dragDelegate = self; list.dropDelegate = self; list.dragInteractionEnabled = true }
+        if let remoteProfile {
+            client = RemoteFileClient(remoteProfile)
+            reload(); return
+        }
         let id = UserDefaults.standard.string(forKey: clientIDKey) ?? Bundle.main.object(forInfoDictionaryKey: "OneDriveClientID") as? String ?? ""
         if OneDriveClient.validClientID(id) {
             client = OneDriveClient(clientID: id)
@@ -462,7 +541,7 @@ private final class OneDriveCell: UITableViewCell {
         updateNavigation()
     }
     private func updateNavigation() {
-        pathLabel.text = "  OneDrive online:/" + folders.map(\.name).joined(separator: "/")
+        pathLabel.text = "  " + onlineLocation()
         backButton.isEnabled = !busy && !backHistory.isEmpty
         forwardButton.isEnabled = !busy && !forwardHistory.isEmpty
         upButton.isEnabled = !busy && !folders.isEmpty
@@ -527,27 +606,52 @@ private final class OneDriveCell: UITableViewCell {
         work?.cancel()
         if let onClose { onClose() } else { dismiss(animated: true) }
     }
+    private var completionNotice: String?
+    private func observeTransfer(_ client: (any CommanderOnlineClient)?) {
+        (client as? RemoteFileClient)?.transferProgress = { [weak self] phase, done, total in
+            guard let self, total > 0 else { return }
+            let percent = Int(min(100, Double(done) / Double(total) * 100))
+            self.commander?.updateTransferProgress(self.locationTitle + ": " + L10n.get(phase) + " · \(done)/\(total) Bytes (\(percent)%)", progress: percent)
+        }
+    }
+    private func transferProgress(_ completed: Int, total: Int, name: String) {
+        let percent = total == 0 ? 0 : completed * 100 / total
+        commander?.updateTransferProgress(locationTitle + ": \(completed)/\(total) " + text("Objekte bearbeitet", "items processed") + " (\(percent)%) · " + name, progress: percent)
+    }
+    private func rememberRecovery(_ client: any CommanderOnlineClient, source: String) {
+        guard let backup = client.moveBackupLocation else { return }
+        record(L10n.get("remote_recovery"), source: source, destination: backup)
+        completionNotice = L10n.get("remote_recovery_notice") + "\n" + backup
+    }
     private func run(transfer: Bool = false, _ action: @escaping () async throws -> Void) {
         guard !busy, commander?.operationInProgress != true else { return }
-        busy = true
+        busy = true; completionNotice = nil
         updateNavigation()
-        if transfer { commander?.showProgress(text("OneDrive: Übertragung läuft…", "OneDrive: transferring…"), progress: 0, cancellable: true, indeterminate: true, onCancel: { [weak self] in self?.work?.cancel() }) }
+        if transfer {
+            observeTransfer(client)
+            commander?.showProgress(locationTitle + ": " + text("Übertragung läuft…", "transferring…"), progress: 0, cancellable: true, indeterminate: true, onCancel: { [weak self] in self?.work?.cancel() })
+        }
         work = Task { [weak self] in
             guard let self else { return }
-            var status = self.text("OneDrive: fertig", "OneDrive: complete")
+            var status = self.locationTitle + ": " + self.text("fertig", "complete")
             defer {
                 self.busy = false; self.refreshControl?.endRefreshing(); self.updateNavigation(); self.onStateChanged?()
                 if transfer { self.commander?.finishProgress(status); self.commander?.refreshAllPanes(clearSelectionIn: []) }
+                if transfer { (self.client as? RemoteFileClient)?.transferProgress = nil }
             }
-            do { try await action() }
-            catch is CancellationError { status = self.text("Abgebrochen; abgeschlossene Schritte bleiben erhalten.", "Cancelled; completed steps are retained.") }
-            catch { status = error.localizedDescription; self.error(error.localizedDescription) }
+            do { try await action(); status = self.completionNotice ?? status }
+            catch is CancellationError { status = self.text("Abgebrochen; abgeschlossene Schritte bleiben erhalten.", "Cancelled; completed steps are retained.") + (self.completionNotice.map { "\n" + $0 } ?? "") }
+            catch {
+                let nsError = error as NSError
+                let description = nsError.domain == "OpenCommander.Remote" ? L10n.get(nsError.localizedDescription) : error.localizedDescription
+                status = description + (self.completionNotice.map { "\n" + $0 } ?? ""); self.error(status)
+            }
         }
     }
     private func error(_ description: String) {
         message.text = items.isEmpty ? description : nil
         guard presentedViewController == nil, view.window != nil else { return }
-        let alert = UIAlertController(title: "OneDrive", message: description, preferredStyle: .alert)
+        let alert = UIAlertController(title: locationTitle, message: description, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
     }
@@ -568,7 +672,7 @@ private final class OneDriveCell: UITableViewCell {
         cache[key(folders)] = listing; treeChildren = cache
         for count in 0...folders.count { expanded.insert(key(Array(folders.prefix(count)))) }
         authenticated = true
-        title = folders.last?.name ?? "OneDrive online"
+        title = folders.last?.name ?? locationTitle
         message.text = items.isEmpty ? text("Dieser Ordner ist leer.", "This folder is empty.") : nil
         applyListingOrder(); rebuildTree()
     }
@@ -579,9 +683,11 @@ private final class OneDriveCell: UITableViewCell {
     @objc private func actions() {
         onActivate?()
         guard !busy else { return }
-        let menu = UIAlertController(title: "OneDrive online", message: text("Dateien und Ordner direkt in OpenCommander. Vorschau, Kopieren, Verschieben und Drag-and-drop verwenden die normalen Bedienelemente.", "Files and folders directly in OpenCommander. Preview, copy, move and drag-and-drop use the regular controls."), preferredStyle: .actionSheet)
+        let menu = UIAlertController(title: locationTitle, message: text("Dateien und Ordner direkt in OpenCommander. Vorschau, Kopieren, Verschieben und Drag-and-drop verwenden die normalen Bedienelemente.", "Files and folders directly in OpenCommander. Preview, copy, move and drag-and-drop use the regular controls."), preferredStyle: .actionSheet)
+        if remoteProfile == nil {
         menu.addAction(UIAlertAction(title: text("Mit Microsoft verbinden", "Connect to Microsoft"), style: .default) { [weak self] _ in self?.connect() })
         menu.addAction(UIAlertAction(title: text("Microsoft-App einrichten", "Configure Microsoft app"), style: .default) { [weak self] _ in self?.configure() })
+        }
         if client != nil && authenticated {
             if !folders.isEmpty { menu.addAction(UIAlertAction(title: text("Übergeordneter Ordner", "Parent folder"), style: .default) { [weak self] _ in
                 self?.navigateOnlineParent()
@@ -594,7 +700,9 @@ private final class OneDriveCell: UITableViewCell {
                 picker.delegate = self; picker.allowsMultipleSelection = true
                 self.present(picker, animated: true)
             })
-            menu.addAction(UIAlertAction(title: text("Verbindung trennen", "Disconnect"), style: .destructive) { [weak self] _ in self?.disconnect() })
+            menu.addAction(UIAlertAction(title: text("Verbindung trennen", "Disconnect"), style: .destructive) { [weak self] _ in
+                if self?.remoteProfile != nil { self?.onClose?() } else { self?.disconnect() }
+            })
         }
         menu.addAction(UIAlertAction(title: text("Abbrechen", "Cancel"), style: .cancel))
         if let item = selectedItems.first, let row = visibleItems.firstIndex(where: { $0.id == item.id }) {
@@ -680,7 +788,7 @@ private final class OneDriveCell: UITableViewCell {
         let theme = palette
         if tableView === treeView {
             let path = treeRows[indexPath.row], id = key(path)
-            cell.textLabel?.text = String(repeating: "  ", count: path.count) + (expanded.contains(id) ? "▼ " : "▶ ") + (path.last?.name ?? "OneDrive online")
+            cell.textLabel?.text = String(repeating: "  ", count: path.count) + (expanded.contains(id) ? "▼ " : "▶ ") + (path.last?.name ?? locationTitle)
             cell.textLabel?.font = .systemFont(ofSize: 12); cell.textLabel?.textColor = theme.primaryText
             cell.backgroundColor = id == key(folders) ? theme.selectionBackground : .clear
             cell.accessibilityIdentifier = "OneDriveTree-\(id)"
@@ -746,7 +854,7 @@ private final class OneDriveCell: UITableViewCell {
         alert.addAction(UIAlertAction(title: L10n.get("copy"), style: .default) { [weak self] _ in self?.copyOnlineSelection(move: false) })
         alert.addAction(UIAlertAction(title: L10n.get("cut"), style: .default) { [weak self] _ in self?.copyOnlineSelection(move: true) })
         alert.addAction(UIAlertAction(title: text("Umbenennen", "Rename"), style: .default) { [weak self] _ in self?.namePrompt(item: item) })
-        alert.addAction(UIAlertAction(title: text("In OneDrive-Papierkorb verschieben", "Move to OneDrive recycle bin"), style: .destructive) { [weak self] _ in self?.confirmRecycle(item) })
+        alert.addAction(UIAlertAction(title: remoteProfile == nil ? text("In OneDrive-Papierkorb verschieben", "Move to OneDrive recycle bin") : L10n.get("remote_delete"), style: .destructive) { [weak self] _ in self?.confirmRecycle(item) })
         alert.addAction(UIAlertAction(title: text("Abbrechen", "Cancel"), style: .cancel))
         alert.popoverPresentationController?.sourceView = tableView
         alert.popoverPresentationController?.sourceRect = tableView.rectForRow(at: row)
@@ -775,7 +883,7 @@ private final class OneDriveCell: UITableViewCell {
         present(alert, animated: true)
     }
     private func confirmRecycle(_ item: OneDriveItem) {
-        let alert = UIAlertController(title: text("In den Papierkorb verschieben?", "Move to recycle bin?"), message: item.name, preferredStyle: .alert)
+        let alert = UIAlertController(title: remoteProfile == nil ? text("In den Papierkorb verschieben?", "Move to recycle bin?") : L10n.get("remote_delete"), message: item.name, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: text("Verschieben", "Move"), style: .destructive) { [weak self] _ in
             self?.run { [weak self] in
                 guard let self, let client = self.client else { return }
@@ -810,7 +918,8 @@ extension OneDriveBrowser: UITableViewDragDelegate, UITableViewDropDelegate {
         run(transfer: true) { [weak self] in
             defer { completion() }
             guard let self, let client = self.client else { return }
-            for url in urls {
+            for (index, url) in urls.enumerated() {
+                self.transferProgress(index, total: urls.count, name: url.lastPathComponent)
                 try Task.checkCancellation()
                 let accessed = url.startAccessingSecurityScopedResource()
                 defer { if accessed { url.stopAccessingSecurityScopedResource() } }
@@ -846,26 +955,44 @@ extension OneDriveBrowser: UITableViewDragDelegate, UITableViewDropDelegate {
         let destination = useCurrentFolder ? folders.last?.id : parent
         run(transfer: true) { [weak self] in
             guard let self, let targetClient = self.client, let sourceClient = source.client else { return }
-            for item in selection.items {
+            self.observeTransfer(sourceClient)
+            defer { (sourceClient as? RemoteFileClient)?.transferProgress = nil }
+            for (index, item) in selection.items.enumerated() {
+                self.transferProgress(index, total: selection.items.count, name: item.name)
                 try Task.checkCancellation()
                 let sourceLocation = try await source.destinationLocation(selection.parentID, name: item.name)
                 // Validate ancestors with metadata, including collapsed/unloaded
                 // tree targets. Never copy a folder into itself or descendants.
-                try await targetClient.validateDestination(destination, excluding: item.id)
+                let sameConnection = targetClient.clientID == sourceClient.clientID
+                if sameConnection { try await targetClient.validateDestination(destination, excluding: item.id) }
                 guard let name = try await self.destinationName(item.name, folder: item.isFolder, parent: destination, excluding: move ? item.id : nil) else { continue }
                 let targetLocation = try await self.destinationLocation(destination, name: name)
-                if move {
+                if move && sameConnection {
                     // Name and parent change atomically; never rename the source first.
                     try await sourceClient.move(item, parent: destination, name: name)
                     self.record(L10n.get("move"), source: sourceLocation, destination: targetLocation)
                     self.undoHistory.append(.move(try await sourceClient.metadata(item.id), selection.parentID, item.name))
                 } else {
+                    let snapshot = move ? try await sourceClient.remoteSnapshot(item) : [:]
                     let url = try await sourceClient.downloadTree(item)
                     defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+                    let content = try await Task.detached { try RemoteContent.snapshot(url) }.value
+                    if move, sourceClient is RemoteFileClient, content != snapshot { throw RemoteConnection.failure("remote_changed") }
                     let staged = url.deletingLastPathComponent().appendingPathComponent(name)
                     if staged != url { try FileManager.default.moveItem(at: url, to: staged) }
                     try await targetClient.uploadTree(staged, parent: destination)
                     self.record(L10n.get("copy"), source: sourceLocation, destination: targetLocation)
+                    if move {
+                        // Verify the complete destination before changing the source.
+                        guard let uploaded = try await targetClient.children(of: destination).first(where: { $0.name == name }) else { throw RemoteConnection.failure("remote_changed") }
+                        let verified = try await targetClient.downloadTree(uploaded)
+                        defer { try? FileManager.default.removeItem(at: verified.deletingLastPathComponent()) }
+                        guard try await Task.detached(operation: { try RemoteContent.snapshot(verified) }).value == content else { throw RemoteConnection.failure("remote_changed") }
+                        do { try await sourceClient.recycleUnchanged(item, snapshot: snapshot) }
+                        catch { self.rememberRecovery(sourceClient, source: sourceLocation); throw error }
+                        self.record(L10n.get("move"), source: sourceLocation, destination: targetLocation)
+                        self.rememberRecovery(sourceClient, source: sourceLocation)
+                    }
                 }
             }
             if Self.clipboard?.selection === selection, move { Self.clipboard = nil }
@@ -880,12 +1007,15 @@ extension OneDriveBrowser: UITableViewDragDelegate, UITableViewDropDelegate {
             guard let self, let client = self.client else { return }
             let scope = directory.startAccessingSecurityScopedResource()
             defer { if scope { directory.stopAccessingSecurityScopedResource() } }
-            for item in selection.items {
+            for (index, item) in selection.items.enumerated() {
+                self.transferProgress(index, total: selection.items.count, name: item.name)
                 try Task.checkCancellation()
                 let sourceLocation = try await self.destinationLocation(selection.parentID, name: item.name)
                 let snapshot = move ? try await client.remoteSnapshot(item) : [:]
                 let url = try await client.downloadTree(item)
                 defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+                let content = try await Task.detached { try RemoteContent.snapshot(url) }.value
+                if move, client is RemoteFileClient, content != snapshot { throw RemoteConnection.failure("remote_changed") }
                 let destination = directory.appendingPathComponent(item.name)
                 guard !FileManager.default.fileExists(atPath: destination.path) else { throw OneDriveFailure.message("Destination already exists: " + item.name + ". Source retained.") }
                 // Copy into an isolated directory on the destination volume;
@@ -895,12 +1025,15 @@ extension OneDriveBrowser: UITableViewDragDelegate, UITableViewDropDelegate {
                 defer { try? FileManager.default.removeItem(at: staging) }
                 let ready = staging.appendingPathComponent(item.name)
                 try await Task.detached { try FileManager.default.copyItem(at: url, to: ready) }.value
+                guard try await Task.detached(operation: { try RemoteContent.snapshot(ready) }).value == content else { throw RemoteConnection.failure("remote_changed") }
                 try Task.checkCancellation()
                 try FileManager.default.moveItem(at: ready, to: destination)
                 self.record(L10n.get("copy"), source: sourceLocation, destination: destination.path)
                 if move {
-                    try await client.recycleUnchanged(item, snapshot: snapshot)
+                    do { try await client.recycleUnchanged(item, snapshot: snapshot) }
+                    catch { self.rememberRecovery(client, source: sourceLocation); throw error }
                     self.record(L10n.get("move"), source: sourceLocation, destination: destination.path)
+                    self.rememberRecovery(client, source: sourceLocation)
                 }
             }
             if Self.clipboard?.selection === selection, move { Self.clipboard = nil }

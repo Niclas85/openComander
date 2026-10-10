@@ -1,5 +1,5 @@
---- /Users/niklaus/Documents/openComander/ios/OpenCommander/Pane.swift
-+++ /Users/niklaus/Documents/openComander/ios/OpenCommander/Pane.swift
+--- /Users/niklaus/Documents/OpenCommander/ios/OpenCommander/Pane.swift
++++ /Users/niklaus/Documents/OpenCommander/ios/OpenCommander/Pane.swift
 @@ -206,6 +206,23 @@
      }
  

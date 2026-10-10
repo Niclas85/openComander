@@ -29,7 +29,7 @@ Open source:
 
 The source code is publicly available so users can inspect what the app does, report issues and contribute improvements:
 
-https://github.com/Niclas85/openComander
+https://github.com/Niclas85/OpenCommander
 
 Contact:
 

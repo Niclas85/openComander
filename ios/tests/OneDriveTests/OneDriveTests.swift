@@ -326,5 +326,40 @@ final class MockMicrosoft: URLProtocol {
         catch { check(!error.localizedDescription.contains("sensitive"), "Raw OAuth response is not exposed") }
         check(deniedStore.value == nil, "Revoked refresh token removed")
         print("PASS revoked credential and sanitized OAuth errors")
+
+        var toolName = "Kind.txt", toolTag = "v1"
+        let toolClient = OneDriveClient(clientID: id, session: session, store: MemoryTokens(), downloadFile: { url in
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try Data("abc".utf8).write(to: file)
+            return (file, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        })
+        MockMicrosoft.handler = { request in
+            if request.url!.host == "login.microsoftonline.com" { return (200, #"{"access_token":"fixture-access","expires_in":3600}"#) }
+            let path = request.url!.path
+            if request.httpMethod == "PATCH" {
+                check(request.value(forHTTPHeaderField: "If-Match") == toolTag, "Online tool rename must pin version")
+                toolName = (try JSONSerialization.jsonObject(with: body(request)) as! [String: Any])["name"] as! String
+                toolTag = "v2"
+            }
+            let item: [String: Any] = ["id": "tool-file", "name": toolName, "size": 3, "eTag": toolTag,
+                "parentReference": ["id": "tool-folder"], "@microsoft.graph.downloadUrl": "https://download.example/fixture"]
+            let object: [String: Any]
+            if path.hasSuffix("root/children") {
+                object = ["value": [["id": "tool-folder", "name": "Ordner", "folder": ["childCount": 1], "eTag": "folder-v1"]]]
+            } else if path.hasSuffix("children") { object = ["value": [item]] }
+            else { object = item }
+            return (200, String(data: try JSONSerialization.data(withJSONObject: object), encoding: .utf8)!)
+        }
+        let parents = try await CommanderOnlineTools.resolve("/Ordner", client: toolClient)
+        let found = try await CommanderOnlineTools.scan(toolClient, ancestors: [], hidden: false)
+        check(found.contains { $0.path == "Ordner/Kind.txt" }, "Graph recursive tool search")
+        let content = try await CommanderOnlineTools.content(toolClient, ancestors: parents, hidden: false)
+        check(content["Kind.txt"]?.hasPrefix("sha256:") == true, "Graph content comparison")
+        let onlineItem = try await toolClient.children(of: parents.last!.id).first!
+        let rename = try await CommanderOnlineTools.renamePlan(toolClient, parent: parents.last!.id, selected: [onlineItem], fields: ["Test-[C][E]", "", "", "1", "3"])
+        var toolAudit = 0
+        let renamed = try await CommanderOnlineTools.rename(toolClient, plan: rename) { _ in toolAudit += 1 }
+        check(renamed == 1 && toolAudit == 1 && toolName == "Test-001.txt", "Graph tool preview/apply/audit")
+        print("PASS OneDrive online tools: recursive search, editable path, content comparison and conditional multi-rename")
     }
 }

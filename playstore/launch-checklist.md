@@ -12,7 +12,7 @@
 
 ## Open Source Trust
 
-- Public repository is available: https://github.com/Niclas85/openComander
+- Public repository is available: https://github.com/Niclas85/OpenCommander
 - License file is present.
 - README explains build steps.
 - Issues are enabled.
@@ -29,6 +29,8 @@
 - Store listing avoids third-party trademarks in promotional claims.
 - Screenshots show real product UI.
 - Feature graphic and icon match the app name.
+- The published Google Play icon matches the installed Android launcher icon
+  (normal, round and adaptive variants); verify on a physical phone before release.
 
 ## Community Launch
 

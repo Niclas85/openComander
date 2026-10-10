@@ -10,7 +10,7 @@ Anschrift: Emil Frey Strasse 56, 4142 Münchenstein, Schweiz
 
 E-Mail: info@opengames.vip
 
-Website: https://github.com/Niclas85/openComander
+Website: https://github.com/Niclas85/OpenCommander
 
 ## Zweck der App
 

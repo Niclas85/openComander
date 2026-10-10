@@ -52,7 +52,7 @@ try:
     time.sleep(1)
     
     # 4. Take screenshot of final state
-    driver.save_screenshot("/Users/niklaus/Documents/openComander/ios/final_test_result.png")
+    driver.save_screenshot("/Users/niklaus/Documents/OpenCommander/ios/final_test_result.png")
     print("Screenshot saved to final_test_result.png")
     
     print("All tests passed successfully.")

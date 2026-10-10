@@ -1,6 +1,6 @@
 import re
 
-with open("/Users/niklaus/Documents/openComander/ios/OpenCommander/ViewController.swift", "r") as f:
+with open("/Users/niklaus/Documents/OpenCommander/ios/OpenCommander/ViewController.swift", "r") as f:
     content = f.read()
 
 # Add import
@@ -77,5 +77,5 @@ new_zip = """    @objc func createZipFromCurrentSelection() {
 
 content = content.replace(old_zip, new_zip)
 
-with open("/Users/niklaus/Documents/openComander/ios/OpenCommander/ViewController.swift", "w") as f:
+with open("/Users/niklaus/Documents/OpenCommander/ios/OpenCommander/ViewController.swift", "w") as f:
     f.write(content)

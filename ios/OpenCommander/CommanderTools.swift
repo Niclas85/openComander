@@ -35,14 +35,15 @@ enum CommanderTools {
     static func failure(_ message: String) -> NSError {
         NSError(domain: "OpenCommander.Tools", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
     }
-    static func search(_ root: URL, query: String, hidden: Bool, cancel: FileOperationCancellation) throws -> (urls: [URL], warnings: [String]) {
+    static func search(_ root: URL, query: String, hidden: Bool, caseSensitive: Bool = false, cancel: FileOperationCancellation) throws -> (urls: [URL], warnings: [String]) {
         let scan = try scan(root, hidden: hidden, cancel: cancel)
         // Plain text matches part of a name; * and ? use anchored glob semantics.
         let normalized = query.precomposedStringWithCanonicalMapping
         let wildcard = normalized.contains("*") || normalized.contains("?")
         let expression = NSRegularExpression.escapedPattern(for: normalized)
             .replacingOccurrences(of: "\\*", with: ".*").replacingOccurrences(of: "\\?", with: ".")
-        let regex = try NSRegularExpression(pattern: wildcard ? "^" + expression + "$" : expression, options: .caseInsensitive)
+        let regex = try NSRegularExpression(pattern: wildcard ? "^" + expression + "$" : expression,
+                                            options: caseSensitive ? [] : .caseInsensitive)
         var urls: [URL] = []
         for (_, url) in scan.entries.sorted(by: { $0.key.localizedStandardCompare($1.key) == .orderedAscending }) {
             try cancel.check()

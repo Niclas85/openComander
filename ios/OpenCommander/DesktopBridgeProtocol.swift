@@ -14,6 +14,10 @@ protocol DesktopBridgeProtocol {
     func installedCloudApplications() -> [[String: String]]
     func chooseArchiveDestination(name: String, directory: URL, title: String, completion: @escaping (URL?) -> Void)
     func chooseLocation(title: String, completion: @escaping (URL?) -> Void)
+    func remoteOperation(_ requestID: String, connection: Data, password: String?, operation: String,
+                         path: String, destination: String?, localURL: URL?, completion: @escaping (Data?, NSError?) -> Void)
+    func cancelRemoteOperation(_ requestID: String)
+    func remoteHostKeys(_ connection: Data, completion: @escaping (String?, NSError?) -> Void)
 }
 #endif
 

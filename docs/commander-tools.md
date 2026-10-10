@@ -12,6 +12,9 @@ Suchpfads verändern die angezeigten Dateiseiten nicht. **Werkzeuge** enthält
 weiterhin Vergleich und Mehrfach-Umbenennen, nicht mehr die Suche.
 Treffer zeigen den Dateinamen und darunter den vollständigen Pfad. Lange Pfade
 werden mehrzeilig umgebrochen, statt abgeschnitten zu werden.
+Die Checkbox **Groß-/Kleinschreibung beachten** ist bei jedem Öffnen abgewählt.
+Aktiviert unterscheidet sie Groß- und Kleinbuchstaben, sowohl bei Teilnamen
+als auch bei Suchmustern mit `*` und `?`.
 
 | Aktion | Tastatur | Verhalten |
 | --- | --- | --- |
@@ -25,7 +28,7 @@ Suchen/Ersetzen ist wörtlich und unterscheidet Groß-/Kleinschreibung.
 
 Lokale Laufwerke, Netzwerk-Mounts und eingebundene iCloud-/Google-Drive-/OneDrive-
 Ordner werden über dasselbe Dateisystem verarbeitet. Der separate **OneDrive-Online**-
-Bereich und ZIP-Inhalte werden von diesen drei Werkzeugen noch nicht unterstützt.
+Bereich sowie FTP/FTPS/SFTP werden ebenfalls unterstützt; ZIP-Inhalte nicht.
 Die Werkzeuge sind derzeit in der Mac-Oberfläche erreichbar, nicht in Linux/Android.
 
 ## Sicherheit und Grenzen
@@ -39,9 +42,12 @@ Die Werkzeuge sind derzeit in der Mac-Oberfläche erreichbar, nicht in Linux/And
 - Mehrfach-Umbenennen maximal 10.000 Einträge, keine vorhandenen Ziele ersetzen,
   keine doppelten Zielnamen, keine ungültigen Pfade. Vorschau muss vor Anwenden
   erstellt werden; Quellen und Zielbelegung werden danach erneut geprüft.
-- Bereits ausgeführte Umbenennungen werden bei Fehler/Abbruch zurückgenommen.
+- Lokal bereits ausgeführte Umbenennungen werden bei Fehler/Abbruch zurückgenommen.
   Ist eine sichere Rücknahme wegen zwischenzeitlicher externer Änderungen nicht
   mehr möglich, wird der verbleibende Pfad ausdrücklich gemeldet.
+- Online werden abgeschlossene Umbenennungen einzeln protokolliert; bei Fehler
+  oder Abbruch bleiben sie erhalten. Rückgängig über den Hauptknopf, schrittweise
+  und nur solange der jeweilige Browser geöffnet ist. Kein atomarer Batch-Rename.
 - Namenstausch und reine Groß-/Kleinschreibungsänderungen auf
   nicht-case-sensitiven Laufwerken werden vorsichtshalber abgelehnt.
 - Kein Text-Diff-Editor, keine automatische Verzeichnissynchronisierung und
@@ -49,7 +55,7 @@ Die Werkzeuge sind derzeit in der Mac-Oberfläche erreichbar, nicht in Linux/And
 
 ## Weitere Total-Commander-artige Ausbaustufen (noch offen)
 
-Online-Anbindung der Werkzeuge, Inhalts-/Größen-/Datumsfilter, Duplikatsuche,
+Inhalts-/Größen-/Datumsfilter, Duplikatsuche,
 Text-Diff, geprüfte Synchronisationsvorschau, FTP/FTPS-Client mit Warteschlange,
 weitere Archivformate, Datei-Aufteilen/Zusammenfügen, Prüfsummenexport,
 konfigurierbare Spalten/Benutzerbefehle und Plugin-Schnittstellen.

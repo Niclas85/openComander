@@ -13,6 +13,13 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "16.0"
+    preBuildScripts:
+      - name: Build SSH password helper
+        script: 'sh "$SRCROOT/build-ssh-askpass.sh"'
+        inputFiles:
+          - $(SRCROOT)/OpenCommanderMacBridge/SSHAskPass.c
+          - $(SRCROOT)/build-ssh-askpass.sh
+        basedOnDependencyAnalysis: false
     dependencies:
       - package: ZIPFoundation
       - target: OpenCommanderMacBridge
@@ -84,6 +91,7 @@ targets:
     deploymentTarget: "13.0"
     sources:
       - path: OpenCommanderMacBridge/DesktopBridge.swift
+      - path: OpenCommander/RemoteConnection.swift
       - path: OpenCommander/DesktopBridgeProtocol.swift
     settings:
       base:

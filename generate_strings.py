@@ -4,7 +4,7 @@ import os
 import re
 
 langs = {'default': 'en'}
-for path in glob.glob('/Users/niklaus/Documents/openComander/app/src/main/res/values-*'):
+for path in glob.glob('/Users/niklaus/Documents/OpenCommander/app/src/main/res/values-*'):
     lang = os.path.basename(path).split('-')[1]
     langs[lang] = lang
 
@@ -26,9 +26,9 @@ def parse_strings(filepath):
 all_strings = {}
 for lang_key, lang_code in langs.items():
     if lang_key == 'default':
-        filepath = '/Users/niklaus/Documents/openComander/app/src/main/res/values/strings.xml'
+        filepath = '/Users/niklaus/Documents/OpenCommander/app/src/main/res/values/strings.xml'
     else:
-        filepath = f'/Users/niklaus/Documents/openComander/app/src/main/res/values-{lang_key}/strings.xml'
+        filepath = f'/Users/niklaus/Documents/OpenCommander/app/src/main/res/values-{lang_key}/strings.xml'
     all_strings[lang_code] = parse_strings(filepath)
 
 print("import Foundation\n")

@@ -28,7 +28,7 @@ Open Source:
 
 Der Quellcode ist offen verfuegbar, damit Nutzer nachvollziehen koennen, was die App tut, Fehler melden und Verbesserungen beitragen koennen:
 
-https://github.com/Niclas85/openComander
+https://github.com/Niclas85/OpenCommander
 
 Kontakt:
 

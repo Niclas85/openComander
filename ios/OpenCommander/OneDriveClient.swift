@@ -117,7 +117,36 @@ struct OneDriveKeychain: OneDriveTokenStore {
 
 /// Public-client OAuth. No browser cookies, passwords or client secrets are read.
 /// Refresh credentials stay in Keychain; Graph bearer tokens are sent only to graph.microsoft.com.
-@MainActor final class OneDriveClient {
+@MainActor protocol CommanderOnlineClient: AnyObject {
+    var clientID: String { get }
+    var moveBackupLocation: String? { get }
+    func children(of id: String?) async throws -> [OneDriveItem]
+    func toolChildren(of id: String?) async throws -> [OneDriveItem]
+    func metadata(_ id: String?) async throws -> OneDriveItem
+    func createFolder(_ name: String, parent: String?) async throws
+    func rename(_ item: OneDriveItem, to name: String) async throws
+    func move(_ item: OneDriveItem, parent: String?, name: String?) async throws
+    func recycle(_ item: OneDriveItem) async throws
+    func validateDestination(_ parent: String?, excluding itemID: String) async throws
+    func upload(_ url: URL, parent: String?) async throws
+    func uploadTree(_ url: URL, parent: String?) async throws
+    func download(_ item: OneDriveItem) async throws -> URL
+    func downloadTree(_ item: OneDriveItem) async throws -> URL
+    func remoteSnapshot(_ item: OneDriveItem) async throws -> [String: String]
+    func recycleUnchanged(_ item: OneDriveItem, snapshot: [String: String]) async throws
+    func hasSavedLogin() throws -> Bool
+    func beginLogin() async throws -> OneDriveDeviceCode
+    func completeLogin(_ code: OneDriveDeviceCode) async throws
+    func disconnect() throws
+}
+extension CommanderOnlineClient {
+    func toolChildren(of id: String?) async throws -> [OneDriveItem] { try await children(of: id) }
+    var moveBackupLocation: String? { nil }
+    func metadata() async throws -> OneDriveItem { try await metadata(nil) }
+    func children() async throws -> [OneDriveItem] { try await children(of: nil) }
+}
+
+@MainActor final class OneDriveClient: CommanderOnlineClient {
     let clientID: String
     private let session: URLSession
     private let store: OneDriveTokenStore
